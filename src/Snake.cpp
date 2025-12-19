@@ -14,11 +14,11 @@ Snake::Snake(int numSegments, float segmentMass, float segmentLength, float spri
     : numSegments(numSegments),
       segmentMass(segmentMass),
       segmentLength(segmentLength),
-      springK(springK * 0.8f),  // 中等硬度
-      damping(damping * 0.5f),  // 小阻尼
+      springK(springK ),  // 中等硬度
+      damping(damping ),  // 小阻尼
       forwardDirection(1.0f, 0.0f, 0.0f),
       targetDirection(1.0f, 0.0f, 0.0f),
-      waveAmplitude(1.5f),
+      waveAmplitude(3.0f),
       waveFrequency(1.2f),
       waveSpeed(2.0f),
       isMoving(false),
@@ -71,7 +71,7 @@ void Snake::update(float dt, float time) {
 
     // 3. 施加重力
     for (auto* mass : masses) {
-      mass->applyForce(glm::vec3(0, -12.0f * mass->getMass(), 0));
+      mass->applyForce(glm::vec3(0, -10.0f * mass->getMass(), 0));
     }
 
     // 4. 彈簧力
@@ -122,8 +122,8 @@ void Snake::enforceSoftDistanceConstraints() {
 
     if (currentDist < 0.001f) continue;
 
-    // 允許±30%的長度變化
-    float maxDist = segmentLength * 1.3f;
+    // 允許±10%的長度變化
+    float maxDist = segmentLength * 1.1f;
     float minDist = segmentLength * 0.7f;
 
     if (currentDist > maxDist || currentDist < minDist) {

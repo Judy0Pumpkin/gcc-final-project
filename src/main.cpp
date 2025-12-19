@@ -695,11 +695,11 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
           if (currentSnakeMode == SnakeMode::LATERAL_UNDULATION) {
             currentSnakeMode = SnakeMode::RECTILINEAR_PROGRESSION;
             snake->setMovementMode(Snake::MovementMode::RECTILINEAR);
-            std::cout << "🐍 Switched to RECTILINEAR PROGRESSION (Boa mode)" << std::endl;
+            std::cout << "Switched to RECTILINEAR PROGRESSION" << std::endl;
           } else {
             currentSnakeMode = SnakeMode::LATERAL_UNDULATION;
             snake->setMovementMode(Snake::MovementMode::LATERAL);
-            std::cout << "🐍 Switched to LATERAL UNDULATION (S-shape mode)" << std::endl;
+            std::cout << "Switched to LATERAL UNDULATION" << std::endl;
           }
         }
         break;
