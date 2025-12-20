@@ -107,10 +107,15 @@ void LightProgram::doMainLoop() {
                  glm::value_ptr(ctx->objects[i]->material.specular));
     glUniform1f(glGetUniformLocation(programId, "material.shininess"), ctx->objects[i]->material.shininess);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, model->textures[ctx->objects[i]->textureIndex]);
-    glUniform1i(glGetUniformLocation(programId, "ourTexture"), 0);
-
+    // 12202158 I change this part cause some model has no texture -- by YING start here
+    if (!model->textures.empty()) {
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, model->textures[ctx->objects[i]->textureIndex]);
+      glUniform1i(glGetUniformLocation(programId, "ourTexture"), 0);
+    } else {
+      glBindTexture(GL_TEXTURE_2D, 0);  // 或直接跳過
+    }
+    // end here
     if (ctx->cubemapTexture != 0) {
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_CUBE_MAP, ctx->cubemapTexture);

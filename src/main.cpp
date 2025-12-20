@@ -31,6 +31,7 @@
 using namespace std;
 
 // ========== 全域變數 ==========
+/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
 Snake* snake = nullptr;
 float simulationTime = 0.0f;
 int snakeModelIndex = -1;
@@ -38,6 +39,7 @@ int snakeModelIndex = -1;
 enum class SnakeMode { LATERAL_UNDULATION, RECTILINEAR_PROGRESSION };
 
 SnakeMode currentSnakeMode = SnakeMode::LATERAL_UNDULATION;
+*/
 
 Context ctx;
 Material mFlatwhite;
@@ -190,7 +192,78 @@ Model* createPlane() {
   return m;
 }
 
+Model* createTestBox() {  // 12202131 在隱藏掉外加snake的程式後，用來測試顯示是否有問題
+  Model* m = new Model();
+
+  // 6 個面 * 4 個頂點 * 3 (x,y,z)
+  // 立方體中心在原點，邊長 2（-1 ~ 1）
+
+  int pos[24 * 3] = {
+      // Front face (z = +1)
+      -1, -1, 1,  // v0
+      1, -1, 1,   // v1
+      1, 1, 1,    // v2
+      -1, 1, 1,   // v3
+
+      // Back face (z = -1)
+      1, -1, -1,   // v4
+      -1, -1, -1,  // v5
+      -1, 1, -1,   // v6
+      1, 1, -1,    // v7
+
+      // Left face (x = -1)
+      -1, -1, -1,  // v8
+      -1, -1, 1,   // v9
+      -1, 1, 1,    // v10
+      -1, 1, -1,   // v11
+
+      // Right face (x = +1)
+      1, -1, 1,   // v12
+      1, -1, -1,  // v13
+      1, 1, -1,   // v14
+      1, 1, 1,    // v15
+
+      // Top face (y = +1)
+      -1, 1, 1,   // v16
+      1, 1, 1,    // v17
+      1, 1, -1,   // v18
+      -1, 1, -1,  // v19
+
+      // Bottom face (y = -1)
+      -1, -1, -1,  // v20
+      1, -1, -1,   // v21
+      1, -1, 1,    // v22
+      -1, -1, 1    // v23
+  };
+
+  int norm[24 * 3] = {// Front (+Z)
+                      0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1,
+                      // Back (-Z)
+                      0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1,
+                      // Left (-X)
+                      -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0,
+                      // Right (+X)
+                      1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,
+                      // Top (+Y)
+                      0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0,
+                      // Bottom (-Y)
+                      0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0};
+
+  for (int i = 0; i < 24 * 3; i++) {
+    m->positions.push_back(static_cast<float>(pos[i]));
+    m->normals.push_back(static_cast<float>(norm[i]));
+  }
+
+  m->numVertex = 24;       // 6 faces * 4 vertices
+  m->drawMode = GL_QUADS;  // 一面一個 quad
+
+  return m;
+}
+
+
+
 // ========== 蛇模型 ==========
+/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
 Model* createSnakeModelSimple(Snake* snake) {
   if (!snake) return nullptr;
 
@@ -244,8 +317,9 @@ Model* createSnakeModelSimple(Snake* snake) {
   m->drawMode = GL_TRIANGLES;
   return m;
 }
-
+*/
 // ========== 蛇初始化 ==========
+/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
 void initializeSnake() {
   std::cout << "\n=== Initializing Snake ===" << std::endl;
 
@@ -258,8 +332,10 @@ void initializeSnake() {
 
   std::cout << "Snake initialized!" << std::endl;
 }
+*/
 
 // ========== 蛇更新 ==========
+/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
 void updateSnake(float deltaTime) {
   if (!snake || snakeModelIndex < 0 || snakeModelIndex >= ctx.models.size()) {
     return;
@@ -283,10 +359,11 @@ void updateSnake(float deltaTime) {
 
   delete newModel;
 }
-
+*/
 // ========== 載入模型 ==========
 void loadModels() {
   ctx.models.push_back(createPlane());  // 地板
+  ctx.models.push_back(createTestBox());  // 12202131 用來測試顯示是否有問題
 }
 
 // ========== 設置物件 ==========
@@ -294,9 +371,14 @@ void setupObjects() {
   // 地板
   ctx.objects.push_back(new Object(0, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, 0.0))));
   (*ctx.objects.rbegin())->material = mMirror;
+
+  // 12202131 用來測試顯示是否有問題
+  ctx.objects.push_back(new Object(1, glm::translate(glm::identity<glm::mat4>(), glm::vec3(2.0, 2.0, 2.0))));
+  (*ctx.objects.rbegin())->material = mShinyred;
 }
 
 // ========== 渲染蛇 ==========
+/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
 void renderSnake() {
   if (!snake || snakeModelIndex < 0 || snakeModelIndex >= ctx.models.size()) {
     return;
@@ -378,7 +460,7 @@ void renderSnake() {
 
   glEnable(GL_CULL_FACE);
 }
-
+*/
 // ========== 主程式 ==========
 int main() {
   initOpenGL();
@@ -394,7 +476,7 @@ int main() {
   loadMaterial();
   loadModels();
   loadPrograms();
-  initializeSnake();
+  //initializeSnake(); 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
   setupObjects();
   initShadowMap();
 
@@ -411,13 +493,16 @@ int main() {
     glfwPollEvents();
     camera.move(window);
 
+    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
     float currentTime = (float)glfwGetTime();
     static float lastTime = 0.0f;
     float deltaTime = currentTime - lastTime;
     lastTime = currentTime;
     if (deltaTime > 0.05f) deltaTime = 0.05f;
+    */
 
     // 蛇控制
+    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
     if (snake) {
       bool shouldMove = false;
 
@@ -452,11 +537,12 @@ int main() {
         snake->stopMoving();
       }
     }
-
+    */
+    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
     updateSnake(deltaTime);
-
+    
     glDisable(GL_CULL_FACE);
-
+    */
     // Shadow pass - Direction light
     if (ctx.directionLightEnable) {
       glm::vec3 lightDir = glm::normalize(ctx.directionLightDirection);
@@ -475,7 +561,7 @@ int main() {
                          glm::value_ptr(ctx.lightSpaceMatrix));
 
       for (auto& obj : ctx.objects) {
-        if (obj->modelIndex == snakeModelIndex) continue;
+        //if (obj->modelIndex == snakeModelIndex) continue; 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
         Model* model = ctx.models[obj->modelIndex];
         glm::mat4 modelMatrix = obj->transformMatrix * model->modelMatrix;
         glUniformMatrix4fv(glGetUniformLocation(shadowProgram, "ModelMatrix"), 1, GL_FALSE,
@@ -512,7 +598,7 @@ int main() {
                          glm::value_ptr(ctx.spotLightSpaceMatrix));
 
       for (auto& obj : ctx.objects) {
-        if (obj->modelIndex == snakeModelIndex) continue;
+        //if (obj->modelIndex == snakeModelIndex) continue; 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
         Model* model = ctx.models[obj->modelIndex];
         glm::mat4 modelMatrix = obj->transformMatrix * model->modelMatrix;
         glUniformMatrix4fv(glGetUniformLocation(shadowProgram, "ModelMatrix"), 1, GL_FALSE,
@@ -553,7 +639,7 @@ int main() {
                            glm::value_ptr(shadowTransforms[face]));
 
         for (auto& obj : ctx.objects) {
-          if (obj->modelIndex == snakeModelIndex) continue;
+          //if (obj->modelIndex == snakeModelIndex) continue; 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
           Model* model = ctx.models[obj->modelIndex];
           glm::mat4 modelMatrix = obj->transformMatrix * model->modelMatrix;
           glUniformMatrix4fv(glGetUniformLocation(shadowProgram, "ModelMatrix"), 1, GL_FALSE,
@@ -587,12 +673,12 @@ int main() {
     for (size_t i = 0; i < ctx.programs.size(); i++) {
       ctx.programs[i]->doMainLoop();
     }
-
+    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
     renderSnake();
 
     // ImGui
     glDisable(GL_CULL_FACE);
-
+    */
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -689,7 +775,7 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         ctx.spotLightCutOffEnable = !ctx.spotLightCutOffEnable;
         break;
       }
-
+        /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
       case GLFW_KEY_M: {
         if (snake) {
           if (currentSnakeMode == SnakeMode::LATERAL_UNDULATION) {
@@ -704,7 +790,7 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         }
         break;
       }
-
+      */
       default:
         break;
     }
