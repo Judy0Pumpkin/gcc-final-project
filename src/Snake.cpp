@@ -1,29 +1,30 @@
-#include "Snake.h"
+ï»¿#include "Snake.h"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846f
 #endif
 
-// ========== ºc³y»PªRºc ==========
+// ========== æ§‹é€ èˆ‡ææ§‹ ==========
 
 Snake::Snake(int numSegments, float segmentMass, float segmentLength, float springK, float damping,
              const glm::vec3& startPos)
     : numSegments(numSegments),
       segmentMass(segmentMass),
       segmentLength(segmentLength),
-      springK(springK ),  // ¤¤µ¥µw«×
-      damping(damping ),  // ¤pªı¥§
+      springK(springK ),  // ä¸­ç­‰ç¡¬åº¦
+      damping(damping),
+      /*  // å°é˜»å°¼ 12302303 å…ˆå°‡é€™å€‹éš±è—
       forwardDirection(1.0f, 0.0f, 0.0f),
       targetDirection(1.0f, 0.0f, 0.0f),
       waveAmplitude(3.0f),
       waveFrequency(1.2f),
       waveSpeed(2.0f),
-      isMoving(false),
-      groundHeight(0.0f),
-      movementMode(MovementMode::LATERAL) {
+      isMoving(false),*/
+      groundHeight(0.6f) /*,
+      movementMode(MovementMode::LATERAL)*/ {
   std::cout << "Creating snake with " << numSegments << " segments..." << std::endl;
   createMassSpringSystem(startPos);
   std::cout << "Snake created successfully!" << std::endl;
@@ -37,23 +38,23 @@ Snake::~Snake() {
 }
 
 void Snake::createMassSpringSystem(const glm::vec3& startPos) {
-  // ³Ğ«Ø½èÂI
+  // å‰µå»ºè³ªé»
   for (int i = 0; i < numSegments; ++i) {
     glm::vec3 pos = startPos + glm::vec3(i * segmentLength, 0.0f, 0.0f);
     pos.y = groundHeight;
     masses.push_back(new Mass(segmentMass, pos));
   }
 
-  // ³Ğ«Ø¼uÂ®³s±µ¬Û¾F½èÂI
+  // å‰µå»ºå½ˆç°§é€£æ¥ç›¸é„°è³ªé»
   for (int i = 0; i < numSegments - 1; ++i) {
     axialSprings.push_back(new Spring(masses[i], masses[i + 1], springK, segmentLength, damping));
   }
 }
 
-// ========== ¥D§ó·s´`Àô ==========
-
+// ========== ä¸»æ›´æ–°å¾ªç’° ==========
+/* 12202303 å…ˆå°‡é€™å€‹éš±è—
 void Snake::update(float dt, float time) {
-  if (dt > 0.016f) dt = 0.016f;  // ­­¨î³Ì¤j®É¶¡¨B
+  if (dt > 0.016f) dt = 0.016f;  // é™åˆ¶æœ€å¤§æ™‚é–“æ­¥
 
   const int subSteps = 8;
   float subDt = dt / subSteps;
@@ -61,57 +62,57 @@ void Snake::update(float dt, float time) {
   for (int step = 0; step < subSteps; ++step) {
     float currentTime = time + step * subDt;
 
-    // 1. ²MªÅ¤W¤@´Vªº¤O
+    // 1. æ¸…ç©ºä¸Šä¸€å¹€çš„åŠ›
     for (auto* mass : masses) {
       mass->resetForce();
     }
 
-    // 2. §ó·s«e¶i¤è¦V
+    // 2. æ›´æ–°å‰é€²æ–¹å‘
     updateForwardDirection();
 
-    // 3. ¬I¥[­«¤O
+    // 3. æ–½åŠ é‡åŠ›
     for (auto* mass : masses) {
       mass->applyForce(glm::vec3(0, -10.0f * mass->getMass(), 0));
     }
 
-    // 4. ¼uÂ®¤O
+    // 4. å½ˆç°§åŠ›
     for (auto* spring : axialSprings) {
       spring->applyForce();
     }
 
-    // 5. ¹B°Ê¤O¡]®Ú¾Ú¼Ò¦¡¿ï¾Ü¡^
+    // 5. é‹å‹•åŠ›ï¼ˆæ ¹æ“šæ¨¡å¼é¸æ“‡ï¼‰
     if (isMoving) {
       if (movementMode == MovementMode::LATERAL) {
-        applyLateralUndulation(currentTime);  // S§Îªi°Ê
+        applyLateralUndulation(currentTime);  // Så½¢æ³¢å‹•
       } else {
-        applyRectilinearProgression(currentTime);  // ª½½uÄ¯°Ê
+        applyRectilinearProgression(currentTime);  // ç›´ç·šè •å‹•
       }
     }
 
-    // 6. Âà¦V¤O
+    // 6. è½‰å‘åŠ›
     applySteeringForce();
 
-    // 7. ¦a­±¼¯À¿
+    // 7. åœ°é¢æ‘©æ“¦
     for (size_t i = 0; i < masses.size(); ++i) {
       applyGroundFriction(masses[i], i, currentTime);
     }
 
-    // 8. §ó·s¦ì¸m©M³t«×
+    // 8. æ›´æ–°ä½ç½®å’Œé€Ÿåº¦
     for (auto* mass : masses) {
       mass->update(subDt);
     }
 
-    // 9. ¦a­±¸I¼²
+    // 9. åœ°é¢ç¢°æ’
     for (auto* mass : masses) {
       handleGroundCollision(mass);
     }
 
-    // 10. ¨¾¤î¹L«×©Ô¦ù
+    // 10. é˜²æ­¢éåº¦æ‹‰ä¼¸
     enforceSoftDistanceConstraints();
   }
 }
 
-// ========== ª«²z¬ù§ô ==========
+// ========== ç‰©ç†ç´„æŸ ==========
 
 void Snake::enforceSoftDistanceConstraints() {
   for (size_t i = 0; i < masses.size() - 1; ++i) {
@@ -122,7 +123,7 @@ void Snake::enforceSoftDistanceConstraints() {
 
     if (currentDist < 0.001f) continue;
 
-    // ¤¹³\¡Ó10%ªºªø«×ÅÜ¤Æ
+    // å…è¨±Â±10%çš„é•·åº¦è®ŠåŒ–
     float maxDist = segmentLength * 1.1f;
     float minDist = segmentLength * 0.7f;
 
@@ -146,12 +147,12 @@ void Snake::handleGroundCollision(Mass* mass) {
 
     glm::vec3 vel = mass->getVelocity();
     if (vel.y < 0) vel.y = 0;
-    vel *= 0.9f;  // ¯à¶q·l¥¢
+    vel *= 0.9f;  // èƒ½é‡æå¤±
     mass->setVelocity(vel);
   }
 }
 
-// ========== ¤è¦V±±¨î ==========
+// ========== æ–¹å‘æ§åˆ¶ ==========
 
 void Snake::updateForwardDirection() {
   if (masses.size() < 2) return;
@@ -181,7 +182,7 @@ void Snake::applySteeringForce() {
   glm::vec3 currentDir = forwardDirection;
   glm::vec3 targetDir = targetDirection;
 
-  // ­pºâÂà¦V¨¤«×
+  // è¨ˆç®—è½‰å‘è§’åº¦
   glm::vec3 cross = glm::cross(currentDir, targetDir);
   float turnAmount = cross.y;
 
@@ -191,11 +192,11 @@ void Snake::applySteeringForce() {
 
   if (angleDiff < 0.01f) return;
 
-  // ­pºâ°¼¦V¤è¦V
+  // è¨ˆç®—å´å‘æ–¹å‘
   glm::vec3 up(0.0f, 1.0f, 0.0f);
   glm::vec3 rightDir = glm::normalize(glm::cross(currentDir, up));
 
-  // ¹ï«e´X­Ó¸`ÂI¬I¥[Âà¦V¤O
+  // å°å‰å¹¾å€‹ç¯€é»æ–½åŠ è½‰å‘åŠ›
   float steerStrength = springK * 0.8f * angleDiff;
   int numSteer = std::min(3, (int)masses.size());
 
@@ -204,11 +205,11 @@ void Snake::applySteeringForce() {
     masses[i]->applyForce(rightDir * turnAmount * steerStrength * weight);
   }
 
-  // ¥­·Æ§ó·s¤è¦V
+  // å¹³æ»‘æ›´æ–°æ–¹å‘
   forwardDirection = glm::normalize(forwardDirection + (targetDir - currentDir) * 0.03f);
 }
 
-// ========== ¹B°Ê¼Ò¦¡ ==========
+// ========== é‹å‹•æ¨¡å¼ ==========
 
 void Snake::applyLateralUndulation(float time) {
   if (!isMoving || masses.size() < 3) return;
@@ -216,7 +217,7 @@ void Snake::applyLateralUndulation(float time) {
   glm::vec3 up(0.0f, 1.0f, 0.0f);
   glm::vec3 lateralDir = glm::normalize(glm::cross(forwardDirection, up));
 
-  // S§Îªi°Ê
+  // Så½¢æ³¢å‹•
   for (size_t i = 1; i < masses.size(); ++i) {
     float phase = (float)i / masses.size() * 2.0f * M_PI;
     float wave = waveAmplitude * sin(waveFrequency * time * 2.0f * M_PI + phase);
@@ -240,13 +241,13 @@ void Snake::applyRectilinearProgression(float time) {
     float temporalPhase = omega * time;
     float wave = sin(temporalPhase - spatialPhase);
 
-    // ­×§ï¼uÂ®ªø«×²£¥ÍÄ¯°Ê
+    // ä¿®æ”¹å½ˆç°§é•·åº¦ç”¢ç”Ÿè •å‹•
     if (i < axialSprings.size()) {
       float lengthMod = 1.0f - 0.15f * wave;
       axialSprings[i]->setRestLength(segmentLength * lengthMod);
     }
 
-    // ¦¬ÁY®É±À¶i
+    // æ”¶ç¸®æ™‚æ¨é€²
     if (wave > 0.3f && i > 0) {
       glm::vec3 localDir = forwardDirection;
       if (i < masses.size() - 1) {
@@ -265,7 +266,7 @@ void Snake::applyRectilinearProgression(float time) {
   masses[0]->applyForce(forwardDirection * 1.0f);
 }
 
-// ========== ¼¯À¿¤O ==========
+// ========== æ‘©æ“¦åŠ› ==========
 
 void Snake::applyGroundFriction(Mass* mass, size_t index, float time) {
   glm::vec3 pos = mass->getPosition();
@@ -275,21 +276,21 @@ void Snake::applyGroundFriction(Mass* mass, size_t index, float time) {
   glm::vec3 horizontalVel(velocity.x, 0.0f, velocity.z);
 
   if (movementMode == MovementMode::LATERAL) {
-    // «D¹ïºÙ¼¯À¿¡]¼ÒÀÀ³DÅì¡^
+    // éå°ç¨±æ‘©æ“¦ï¼ˆæ¨¡æ“¬è›‡é±—ï¼‰
     glm::vec3 up(0.0f, 1.0f, 0.0f);
     glm::vec3 lateralDir = glm::normalize(glm::cross(forwardDirection, up));
 
     float vForward = glm::dot(horizontalVel, forwardDirection);
     float vLateral = glm::dot(horizontalVel, lateralDir);
 
-    // °¼¦V¼¯À¿¤j¡A«e«á¼¯À¿¤p
+    // å´å‘æ‘©æ“¦å¤§ï¼Œå‰å¾Œæ‘©æ“¦å°
     glm::vec3 frictionForward = -0.05f * vForward * forwardDirection * mass->getMass() * 9.8f;
     glm::vec3 frictionLateral = -0.6f * vLateral * lateralDir * mass->getMass() * 9.8f;
 
     mass->applyForce(frictionForward + frictionLateral);
 
   } else {
-    // °ÊºA¼¯À¿¡]Ä¯°Ê¼Ò¦¡¡^
+    // å‹•æ…‹æ‘©æ“¦ï¼ˆè •å‹•æ¨¡å¼ï¼‰
     float waveNumber = 2.0f * M_PI / (masses.size() * 0.5f);
     float phase = waveNumber * index;
     float contraction = sin(waveFrequency * time - phase);
@@ -302,7 +303,7 @@ void Snake::applyGroundFriction(Mass* mass, size_t index, float time) {
   }
 }
 
-// ========== ±±¨î¤¶­± ==========
+// ========== æ§åˆ¶ä»‹é¢ ==========
 
 void Snake::setTargetDirection(const glm::vec3& dir) {
   glm::vec3 newDir = dir;
@@ -326,3 +327,4 @@ void Snake::addForwardForce(float magnitude) {
 glm::vec3 Snake::getHeadPosition() const { return masses.empty() ? glm::vec3(0.0f) : masses[0]->getPosition(); }
 
 glm::vec3 Snake::getForwardDirection() const { return forwardDirection; }
+*/

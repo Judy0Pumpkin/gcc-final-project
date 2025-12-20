@@ -31,10 +31,10 @@
 using namespace std;
 
 // ========== 全域變數 ==========
-/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
 Snake* snake = nullptr;
-float simulationTime = 0.0f;
 int snakeModelIndex = -1;
+/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+float simulationTime = 0.0f;
 
 enum class SnakeMode { LATERAL_UNDULATION, RECTILINEAR_PROGRESSION };
 
@@ -192,7 +192,7 @@ Model* createPlane() {
   return m;
 }
 
-Model* createTestBox() {  // 12202131 在隱藏掉外加snake的程式後，用來測試顯示是否有問題
+Model* createTestBox() {  // 12202131 在隱藏掉外加snake的程式後，用來測試顯示是否有問題 更12202328 已不需要
   Model* m = new Model();
 
   // 6 個面 * 4 個頂點 * 3 (x,y,z)
@@ -263,7 +263,6 @@ Model* createTestBox() {  // 12202131 在隱藏掉外加snake的程式後，用�
 
 
 // ========== 蛇模型 ==========
-/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
 Model* createSnakeModelSimple(Snake* snake) {
   if (!snake) return nullptr;
 
@@ -271,7 +270,7 @@ Model* createSnakeModelSimple(Snake* snake) {
   const auto& masses = snake->getMasses();
   float radius = 0.15f;
 
-  for (size_t i = 0; i < masses.size(); ++i) {
+  for (int i = 0; i < (int)masses.size(); ++i) {
     glm::vec3 pos = masses[i]->getPosition();
     float r = radius;
 
@@ -281,23 +280,38 @@ Model* createSnakeModelSimple(Snake* snake) {
                       pos + glm::vec3(r, r, r),    pos + glm::vec3(-r, r, r)};
 
     // 6 個面的索引
-    int faces[36] = {
-        0, 1, 2, 2, 3, 0,  // 前
-        4, 5, 6, 6, 7, 4,  // 後
-        0, 4, 7, 7, 3, 0,  // 左
-        1, 5, 6, 6, 2, 1,  // 右
-        0, 1, 5, 5, 4, 0,  // 下
-        3, 2, 6, 6, 7, 3   // 上
+    int faces[24] = {
+        0, 3, 2, 1,  // 前
+        4, 5, 6, 7,  // 後
+        7, 3, 0, 4,  // 左
+        5, 1, 2, 6,  // 右
+        4, 0, 1, 5,  // 下
+        6, 2, 3, 7,   // 上
     };
 
     // 6 個面的法線
     glm::vec3 normals[6] = {glm::vec3(0, 0, -1), glm::vec3(0, 0, 1),  glm::vec3(-1, 0, 0),
                             glm::vec3(1, 0, 0),  glm::vec3(0, -1, 0), glm::vec3(0, 1, 0)};
 
-    // 添加所有三角形
-    for (int f = 0; f < 36; ++f) {
+    
+    for (int f = 0; f < 24; ++f) {
       glm::vec3 vertex = v[faces[f]];
-      glm::vec3 normal = normals[f / 6];
+      glm::vec3 normal = normals[f / 4];
+
+      // 第一節蛇頭的 texcoords 用左半邊 [0.0, 0.5]，蛇身用右半邊 [0.5, 1.0]
+      float u, v;
+
+      if (i == 0) {                      // 如果是蛇頭
+        u = (f % 4 < 2) ? 0.0f : 0.5f;
+      } else {                           // 蛇身
+        u = (f % 4 < 2) ? 0.5f : 1.0f;
+      }
+
+      if (f % 4 == 1 || f % 4 == 2) {
+        v = 1.0f;
+      } else {
+        v = 0.0f;
+      }
 
       m->positions.push_back(vertex.x);
       m->positions.push_back(vertex.y);
@@ -307,32 +321,32 @@ Model* createSnakeModelSimple(Snake* snake) {
       m->normals.push_back(normal.y);
       m->normals.push_back(normal.z);
 
-      m->texcoords.push_back(0.0f);
-      m->texcoords.push_back(0.0f);
+      m->texcoords.push_back(u);
+      m->texcoords.push_back(v);
     }
 
-    m->numVertex += 36;
+    m->numVertex += 24;
   }
-
-  m->drawMode = GL_TRIANGLES;
+  m->textures.push_back(createTexture("../assets/models/snake/snake.jpg"));
+  m->drawMode = GL_QUADS;
   return m;
 }
-*/
+
 // ========== 蛇初始化 ==========
-/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
-void initializeSnake() {
+Model* initializeSnake() {
   std::cout << "\n=== Initializing Snake ===" << std::endl;
 
-  // 參數：節數, 質量, 長度, 彈簧常數, 阻尼, 起始位置
+  // 參數：節數, 質量, 每段長度, 彈簧常數, 阻尼, 起始位置
   snake = new Snake(12, 0.3f, 0.4f, 0.5f, 3.5f, glm::vec3(2.0f, 0.5f, 2.5f));
 
   Model* snakeModel = createSnakeModelSimple(snake);
-  ctx.models.push_back(snakeModel);
-  snakeModelIndex = ctx.models.size() - 1;
+  // ctx.models.push_back(snakeModel); // 12202326 我想將他移到統一的地方，所以先試著註解掉
+  // snakeModelIndex = ctx.models.size() - 1; // 12202326 我想將他移到統一的地方，所以先試著註解掉
 
   std::cout << "Snake initialized!" << std::endl;
+  return snakeModel;
 }
-*/
+
 
 // ========== 蛇更新 ==========
 /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
@@ -363,7 +377,9 @@ void updateSnake(float deltaTime) {
 // ========== 載入模型 ==========
 void loadModels() {
   ctx.models.push_back(createPlane());  // 地板
-  ctx.models.push_back(createTestBox());  // 12202131 用來測試顯示是否有問題
+  //ctx.models.push_back(createTestBox());  // 12202131 用來測試顯示是否有問題 更12202328 已不需要
+  ctx.models.push_back(initializeSnake());  // 蛇模型
+  snakeModelIndex = (int)ctx.models.size() - 1;
 }
 
 // ========== 設置物件 ==========
@@ -372,9 +388,15 @@ void setupObjects() {
   ctx.objects.push_back(new Object(0, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, 0.0))));
   (*ctx.objects.rbegin())->material = mMirror;
 
-  // 12202131 用來測試顯示是否有問題
-  ctx.objects.push_back(new Object(1, glm::translate(glm::identity<glm::mat4>(), glm::vec3(2.0, 2.0, 2.0))));
-  (*ctx.objects.rbegin())->material = mShinyred;
+  // 12202131 用來測試顯示是否有問題 更12202328 已不需要
+  //ctx.objects.push_back(new Object(1, glm::translate(glm::identity<glm::mat4>(), glm::vec3(2.0, 2.0, 2.0))));
+  //(*ctx.objects.rbegin())->material = mShinyred;
+
+  // 蛇
+  ctx.objects.push_back(
+      new Object(snakeModelIndex, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, 0.0))));
+
+
 }
 
 // ========== 渲染蛇 ==========
@@ -476,7 +498,7 @@ int main() {
   loadMaterial();
   loadModels();
   loadPrograms();
-  //initializeSnake(); 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+  // initializeSnake(); 12202116 標註為外加的部分，先將這個隱藏退回原本狀態 更12202336 已移到 loadModels 裡面
   setupObjects();
   initShadowMap();
 

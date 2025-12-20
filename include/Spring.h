@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <glm/glm.hpp>
 #include "Mass.h"
@@ -7,34 +7,34 @@ class Spring {
  public:
   /**
    * 
-   * @param m1 ½è¶q1
-   * @param m2 ½è¶q2
-   * @param springConstant ¼uÂ®±`¼Æ k¡]­è«×¡^¡A³æ¦ì¡GN/m
-   * @param restLength ÀR¤îªø«× L¡A³æ¦ì¡Gm
-   * @param dampingConstant ªı¥§«Y¼Æ D¡A³æ¦ì¡GNs/m
+   * @param m1 è³ªé‡1
+   * @param m2 è³ªé‡2
+   * @param springConstant å½ˆç°§å¸¸æ•¸ kï¼ˆå‰›åº¦ï¼‰ï¼Œå–®ä½ï¼šN/m
+   * @param restLength éœæ­¢é•·åº¦ Lï¼Œå–®ä½ï¼šm
+   * @param dampingConstant é˜»å°¼ä¿‚æ•¸ Dï¼Œå–®ä½ï¼šNs/m
    */
   Spring(Mass* m1, Mass* m2, float springConstant, float restLength, float dampingConstant);
 
   /**
-   * ­pºâ¨Ã¬I¥[¼uÂ®¤O
-   * 1. ­pºâ·í«e¼uÂ®ªø«×
-   * 2. ­pºâ¼uÂ®¤O¡]­J§J©w«ß¡^
-   * 3. ­pºâªı¥§¤O
-   * 4. ¹ï¨â­Ó½èÂI¬I¥[¬Û¤Ïªº¤O
+   * è¨ˆç®—ä¸¦æ–½åŠ å½ˆç°§åŠ›
+   * 1. è¨ˆç®—ç•¶å‰å½ˆç°§é•·åº¦
+   * 2. è¨ˆç®—å½ˆç°§åŠ›ï¼ˆèƒ¡å…‹å®šå¾‹ï¼‰
+   * 3. è¨ˆç®—é˜»å°¼åŠ›
+   * 4. å°å…©å€‹è³ªé»æ–½åŠ ç›¸åçš„åŠ›
    */
   void applyForce();
 
   /**
-   * ³]¸mÀR¤îªø«×
-   * ³o¬O¼ÒÀÀ¦Ù¦×¦¬ÁYªºÃöÁä¡I
-   * ³q¹L°ÊºA§ïÅÜ L¡A¥i¥HÅı³Dªº¨­Åé²£¥Íªi°Ê
+   * è¨­ç½®éœæ­¢é•·åº¦
+   * é€™æ˜¯æ¨¡æ“¬è‚Œè‚‰æ”¶ç¸®çš„é—œéµï¼
+   * é€šéå‹•æ…‹æ”¹è®Š Lï¼Œå¯ä»¥è®“è›‡çš„èº«é«”ç”¢ç”Ÿæ³¢å‹•
    *
-   * @param length ·sªºÀR¤îªø«×
+   * @param length æ–°çš„éœæ­¢é•·åº¦
    */
   void setRestLength(float length) { restLength = length; }
 
   /**
-   * Àò¨úÀR¤îªø«×
+   * ç²å–éœæ­¢é•·åº¦
    */
   float getRestLength() const { return restLength; }
 
@@ -43,9 +43,9 @@ class Spring {
   Mass* getMass2() const { return mass2; }
 
  private:
-  Mass* mass1;            // ²Ä¤@­Ó½èÂI
-  Mass* mass2;            // ²Ä¤G­Ó½èÂI
-  float springConstant;   // k - ¼uÂ®±`¼Æ¡]­è«×¡^
-  float restLength;       // L - ÀR¤îªø«×
-  float dampingConstant;  // D - ªı¥§«Y¼Æ
+  Mass* mass1;            // ç¬¬ä¸€å€‹è³ªé»
+  Mass* mass2;            // ç¬¬äºŒå€‹è³ªé»
+  float springConstant;   // k - å½ˆç°§å¸¸æ•¸ï¼ˆå‰›åº¦ï¼‰
+  float restLength;       // L - éœæ­¢é•·åº¦
+  float dampingConstant;  // D - é˜»å°¼ä¿‚æ•¸
 };

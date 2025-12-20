@@ -1,4 +1,4 @@
-#include "Mass.h"
+ï»¿#include "Mass.h"
 
 
 Mass::Mass(float mass, const glm::vec3& position)
@@ -8,12 +8,12 @@ Mass::Mass(float mass, const glm::vec3& position)
       force(0.0f, 0.0f, 0.0f) {  
 }
 
-//¬I¥[¤O,¤O¬O²Ö¥[ªº
+//æ–½åŠ åŠ›,åŠ›æ˜¯ç´¯åŠ çš„
 void Mass::applyForce(const glm::vec3& f) {
   force += f; 
 }
 
-//­«¸m
+//é‡ç½®
 void Mass::resetForce() { force = glm::vec3(0.0f, 0.0f, 0.0f); }
 
 

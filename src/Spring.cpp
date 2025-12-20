@@ -1,32 +1,32 @@
-#include "Spring.h"
+ï»¿#include "Spring.h"
 #include <glm/glm.hpp>
 
 /**
- * ºc³y¨ç¼Æ
+ * æ§‹é€ å‡½æ•¸
  */
 Spring::Spring(Mass* m1, Mass* m2, float springConstant, float restLength, float dampingConstant)
     : mass1(m1), mass2(m2), springConstant(springConstant), restLength(restLength), dampingConstant(dampingConstant) {}
 
 /**
- * ­pºâ¨Ã¬I¥[¼uÂ®¤O
+ * è¨ˆç®—ä¸¦æ–½åŠ å½ˆç°§åŠ›
  *
- * ³o¬O¼uÂ®¨t²Îªº®Ö¤ß¨ç¼Æ
+ * é€™æ˜¯å½ˆç°§ç³»çµ±çš„æ ¸å¿ƒå‡½æ•¸
  *
- * ®Ú¾Ú½×¤åªº¤½¦¡¡G
+ * æ ¹æ“šè«–æ–‡çš„å…¬å¼ï¼š
  *   f = -k(l - L) - D * (dl/dt)
- * 1. ­pºâ·í«e¼uÂ®¦V¶q©Mªø«×
- * 2. ­pºâ¼uÂ®¤O¡]­J§J©w«ß³¡¤À¡^
- * 3. ­pºâªı¥§¤O¡]³t«×¬ÛÃö³¡¤À¡^
- * 4. ¹ï¨â­Ó½èÂI¬I¥[¬Û¤Ïªº¤O
+ * 1. è¨ˆç®—ç•¶å‰å½ˆç°§å‘é‡å’Œé•·åº¦
+ * 2. è¨ˆç®—å½ˆç°§åŠ›ï¼ˆèƒ¡å…‹å®šå¾‹éƒ¨åˆ†ï¼‰
+ * 3. è¨ˆç®—é˜»å°¼åŠ›ï¼ˆé€Ÿåº¦ç›¸é—œéƒ¨åˆ†ï¼‰
+ * 4. å°å…©å€‹è³ªé»æ–½åŠ ç›¸åçš„åŠ›
  */
 void Spring::applyForce() {
-  // === ¨BÆJ 1¡GÀò¨ú¨â­Ó½èÂIªº¦ì¸m©M³t«× ===
+  // === æ­¥é©Ÿ 1ï¼šç²å–å…©å€‹è³ªé»çš„ä½ç½®å’Œé€Ÿåº¦ ===
   glm::vec3 pos1 = mass1->getPosition();
   glm::vec3 pos2 = mass2->getPosition();
   glm::vec3 vel1 = mass1->getVelocity();
   glm::vec3 vel2 = mass2->getVelocity();
 
-  // === ¨BÆJ 2¡G­pºâ¼uÂ®¦V¶q¡]±q½èÂI2«ü¦V½èÂI1¡^===
+  // === æ­¥é©Ÿ 2ï¼šè¨ˆç®—å½ˆç°§å‘é‡ï¼ˆå¾è³ªé»2æŒ‡å‘è³ªé»1ï¼‰===
 
   glm::vec3 direction = pos1 - pos2;
   float currentLength = glm::length(direction);
@@ -34,30 +34,30 @@ void Spring::applyForce() {
  
   if (currentLength < 0.0001f) return;
 
-  // === ¨BÆJ 3¡G­pºâ³æ¦ì¤è¦V¦V¶q ===
+  // === æ­¥é©Ÿ 3ï¼šè¨ˆç®—å–®ä½æ–¹å‘å‘é‡ ===
   glm::vec3 unitDir = direction / currentLength;
 
-  // === ¨BÆJ 4¡G­pºâ¼uÂ®¤O¡]­J§J©w«ß¡^===
-  // ¤½¦¡¡GF_spring = -k(l - L)
+  // === æ­¥é©Ÿ 4ï¼šè¨ˆç®—å½ˆç°§åŠ›ï¼ˆèƒ¡å…‹å®šå¾‹ï¼‰===
+  // å…¬å¼ï¼šF_spring = -k(l - L)
   //
   float springForceMag = -springConstant * (currentLength - restLength);
 
-  // === ¨BÆJ 5¡G­pºâªı¥§¤O ===
+  // === æ­¥é©Ÿ 5ï¼šè¨ˆç®—é˜»å°¼åŠ› ===
   //
   // 
   glm::vec3 relativeVelocity = vel1 - vel2;
   float dampingForceMag = -dampingConstant * glm::dot(relativeVelocity, unitDir);
 
-  // === ¨BÆJ 6¡G¦X¨Ö¼uÂ®¤O©Mªı¥§¤O ===
+  // === æ­¥é©Ÿ 6ï¼šåˆä½µå½ˆç°§åŠ›å’Œé˜»å°¼åŠ› ===
   float totalForceMag = springForceMag + dampingForceMag;
   glm::vec3 force = unitDir * totalForceMag;
 
-  // === ¨BÆJ 7¡G¹ï¨â­Ó½èÂI¬I¥[¬Û¤Ïªº¤O ===
+  // === æ­¥é©Ÿ 7ï¼šå°å…©å€‹è³ªé»æ–½åŠ ç›¸åçš„åŠ› ===
   //
-  // ¤û¹y²Ä¤T©w«ß¡G§@¥Î¤O»P¤Ï§@¥Î¤O
+  // ç‰›é “ç¬¬ä¸‰å®šå¾‹ï¼šä½œç”¨åŠ›èˆ‡åä½œç”¨åŠ›
   //
-  // ½èÂI1 ¨ü¨ì force
-  // ½èÂI2 ¨ü¨ì -force
+  // è³ªé»1 å—åˆ° force
+  // è³ªé»2 å—åˆ° -force
   //
   mass1->applyForce(force);
   mass2->applyForce(-force);
