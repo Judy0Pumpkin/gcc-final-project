@@ -20,6 +20,7 @@ class Snake {
   ~Snake();
   
   void update(float dt);
+  void validateParameters(); 
 
   // 控制
   //void setTargetDirection(const glm::vec3& dir);
@@ -55,6 +56,7 @@ class Snake {
 
   std::vector<glm::vec3> initialPositions;
   void createMassSpringSystem(const glm::vec3& startPos);
+  static constexpr float MAX_TIMER = 100.0f;
 
   // 核心物理
   

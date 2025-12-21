@@ -51,7 +51,7 @@ GameState gameState = GameState::STOPPED;
 
 float gameTimer = 60.0f;  
 float elapsedTime = 0.0f;  
-const int WIN_SCORE = 1;  
+const int WIN_SCORE = 5;  
 
 // 遊戲結果
 enum class GameResult { NONE, WIN, LOSE };
@@ -599,39 +599,63 @@ Model* initializeSnake() {
 
 // ========== 蛇更新 ==========
 void updateSnake(float dtFrame) {
+
   if (!snake || snakeModelIndex < 0 || snakeModelIndex >= ctx.models.size()) {
     return;
   }
-  const float maxSubDt = 0.002f;  // 最大子步長 將每次更新的時間步長限制為 0.002 秒，相當於每秒更新 500 次
-                                  // 為了一步一步慢慢模擬，我先改成0.033，就是每秒30次模擬 by Ying
-  // 如果更新率小，dtFrame會變大，我們就多做幾次子步驟，讓模擬跟時間的關係比較合理一點 by Ying
-  // 函式除了時間更新方式有調整之外，其他部分都跟原本很像 by Ying
-  // 根據每幀時間計算需要的子步數
+
+  const float maxSubDt = 0.002f;
   int substeps = (int)std::ceil(dtFrame / maxSubDt);
   if (substeps < 1) substeps = 1;
+  if (substeps > 30) {
+    std::cerr << "[WARNING] Too many substeps: " << substeps << std::endl;
+    substeps = 30;
+  }
 
-  // 每個子步長的時間
   float dtSub = dtFrame / substeps;
 
-  // 執行每一個子步
   for (int s = 0; s < substeps; ++s) {
     snake->update(dtSub);
   }
 
-  // 更新渲染模型
-  Model* oldModel = ctx.models[snakeModelIndex];
-  oldModel->positions.clear();
-  oldModel->normals.clear();
-  oldModel->texcoords.clear();
-  oldModel->numVertex = 0;
+  Model* model = ctx.models[snakeModelIndex];
 
-  Model* newModel = createSnakeModelSimple(snake);
-  oldModel->positions = newModel->positions;
-  oldModel->normals = newModel->normals;
-  oldModel->texcoords = newModel->texcoords;
-  oldModel->numVertex = newModel->numVertex;
+  // 清空舊資料
+  model->positions.clear();
+  model->normals.clear();
+  model->texcoords.clear();
 
-  delete newModel;
+  // 直接填充新資料
+  const auto& masses = snake->getMasses();
+  float radius = snake->getRadius();
+
+  for (int i = 0; i < (int)masses.size(); ++i) {
+    glm::vec3 pos = masses[i]->getPosition();
+    float r = radius;
+
+    glm::vec3 v[8] = {pos + glm::vec3(-r, -r, -r), pos + glm::vec3(r, -r, -r), pos + glm::vec3(r, r, -r),
+                      pos + glm::vec3(-r, r, -r),  pos + glm::vec3(-r, -r, r), pos + glm::vec3(r, -r, r),
+                      pos + glm::vec3(r, r, r),    pos + glm::vec3(-r, r, r)};
+
+    int faces[24] = {0, 3, 2, 1, 4, 5, 6, 7, 7, 3, 0, 4, 5, 1, 2, 6, 4, 0, 1, 5, 6, 2, 3, 7};
+
+    glm::vec3 normals[6] = {glm::vec3(0, 0, -1), glm::vec3(0, 0, 1),  glm::vec3(-1, 0, 0),
+                            glm::vec3(1, 0, 0),  glm::vec3(0, -1, 0), glm::vec3(0, 1, 0)};
+
+    for (int f = 0; f < 24; ++f) {
+      glm::vec3 vertex = v[faces[f]];
+      glm::vec3 normal = normals[f / 4];
+
+      float u = (i == 0) ? ((f % 4 < 2) ? 0.0f : 0.5f) : ((f % 4 < 2) ? 0.5f : 1.0f);
+      float v_coord = (f % 4 == 1 || f % 4 == 2) ? 1.0f : 0.0f;
+
+      model->positions.insert(model->positions.end(), {vertex.x, vertex.y, vertex.z});
+      model->normals.insert(model->normals.end(), {normal.x, normal.y, normal.z});
+      model->texcoords.insert(model->texcoords.end(), {u, v_coord});
+    }
+  }
+
+  model->numVertex = model->positions.size() / 3;
 }
 
 // 檢測蛇頭是否碰到蘋果
@@ -917,6 +941,10 @@ int main() {
   ImGui_ImplOpenGL3_Init("#version 330 core");
   float lastTime = (float)glfwGetTime();
 
+  int frameCount = 0;
+  float fpsTimer = 0.0f;
+
+
   // 主渲染循環
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
@@ -925,8 +953,24 @@ int main() {
     float currentTime = (float)glfwGetTime();
     float deltaTime = currentTime - lastTime;
     lastTime = currentTime;
-    if (deltaTime > 0.03f) deltaTime = 0.03f; // 12210108 我改成0.03，沒有太嚴謹的考據（問ai的），我們因為物理模擬很多，最好不要太大，但我也不知道跟0.05到底有沒有差
 
+    frameCount++;
+    fpsTimer += deltaTime;
+    if (fpsTimer >= 1.0f) {
+      float fps = frameCount / fpsTimer;
+      std::cout << "[FPS] " << fps << std::endl;
+      if (fps < 30.0f) {
+        std::cerr << "[WARNING] Low FPS detected!" << std::endl;
+      }
+      frameCount = 0;
+      fpsTimer = 0.0f;
+    }
+
+    // **限制極端 deltaTime**
+    if (deltaTime > 0.05f) {
+      std::cerr << "[WARNING] Large frame time: " << deltaTime << std::endl;
+      deltaTime = 0.05f;
+    }
     // 蛇控制
     /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態 更12210116 我正在將這個部分更改到 keyCallback，實際操作改到update之類的地方
     if (snake) {
