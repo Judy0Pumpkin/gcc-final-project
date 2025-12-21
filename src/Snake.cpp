@@ -41,7 +41,8 @@ void Snake::createMassSpringSystem(const glm::vec3& startPos) {
   for (int i = 0; i < numSegments; ++i) {
     glm::vec3 pos = startPos + glm::vec3(i * segmentLength, 0.0f, 0.0f);
     pos.y = groundHeight;
-    masses.push_back(new Mass(segmentMass, pos));
+    float idealMass = segmentMass * (0.7f + (float(i) / numSegments) * 0.3f);  // 從頭到尾質量逐漸增加
+    masses.push_back(new Mass(idealMass, pos));
     initialPositions.push_back(pos);  // 儲存初始位置
   }
 
@@ -197,7 +198,7 @@ void Snake::updateForwardDirection() {
   if (masses.size() < 2) return;
 
   glm::vec3 avgDir(0.0f);
-  int count = std::min(2, (int)masses.size() - 1);  // 12211759 for experiment, we can change this value
+  int count = std::min(1, (int)masses.size() - 1);  // 12211759 for experiment, we can change this value
 
   for (int i = 0; i < count; ++i) {
     glm::vec3 dir = masses[i]->getPosition() - masses[i + 1]->getPosition();
@@ -266,7 +267,7 @@ void Snake::applySteeringForce() {
   glm::vec3 rightDir = glm::normalize(glm::cross(currentDir, up));
 
   // 對前幾個節點施加轉向力
-  int numSteer = std::min(3, (int)masses.size());
+  int numSteer = std::min(1, (int)masses.size());
   for (int i = 0; i < numSteer; ++i) {
     float weight = 1.0f - (float)i / numSteer;
     masses[i]->applyForce(rightDir * turnAmount * steeringStrength * weight);

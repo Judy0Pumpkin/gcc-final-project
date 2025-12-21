@@ -634,7 +634,7 @@ Model* initializeSnake() {
   glm::vec3 startPos(FLOOR_CENTER_X, 0.5f, FLOOR_CENTER_Z);
 
   // 參數：節數, 質量, 每段長度, 彈簧常數, 阻尼, 起始位置, 半徑
-  snake = new Snake(8, 0.020f, 0.25f, 1.0f, 3.5f, startPos, 0.1f);  // 12210456 i change k to 1.0f from 0.5f
+  snake = new Snake(7, 0.020f, 0.178f, 1.0f, 3.5f, startPos, 0.2f);  // 12210456 i change k to 1.0f from 0.5f
 
   Model* snakeModel = createSnakeModelSimple(snake);
 
@@ -948,6 +948,33 @@ void renderSnake() {
   //glEnable(GL_CULL_FACE);
 }
 
+void renderSnakeShadow(GLuint shadowProgram) {
+  if (!snake || snakeModelIndex < 0 || snakeModelIndex >= ctx.models.size()) {
+    return;
+  }
+
+  glm::mat4 snakeModelMatrix = glm::identity<glm::mat4>();
+  glUniformMatrix4fv(glGetUniformLocation(shadowProgram, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(snakeModelMatrix));
+
+  std::vector<float>& positions = ctx.models[snakeModelIndex]->positions;
+
+  GLuint snakeVAO, snakeVBO;
+  glGenVertexArrays(1, &snakeVAO);
+  glGenBuffers(1, &snakeVBO);
+
+  glBindVertexArray(snakeVAO);
+  glBindBuffer(GL_ARRAY_BUFFER, snakeVBO);
+  glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(float), positions.data(), GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(0);
+
+  glDrawArrays(GL_TRIANGLES, 0, ctx.models[snakeModelIndex]->numVertex);
+
+  glBindVertexArray(0);
+  glDeleteVertexArrays(1, &snakeVAO);
+  glDeleteBuffers(1, &snakeVBO);
+}
+
 
 // ========== 主程式 ==========
 int main() {
@@ -955,7 +982,7 @@ int main() {
   GLFWwindow* window = OpenGLContext::getWindow();
   glfwSetWindowTitle(window, "HW2 - 113550001");
 
-  Camera camera(glm::vec3(FLOOR_CENTER_X, 10, FLOOR_CENTER_Z + 15));
+  Camera camera(glm::vec3(FLOOR_CENTER_X-2, 6, FLOOR_CENTER_Z +8));
   camera.initialize(OpenGLContext::getAspectRatio());
   glfwSetWindowUserPointer(window, &camera);
   ctx.camera = &camera;
@@ -1146,6 +1173,7 @@ int main() {
                          glm::value_ptr(ctx.lightSpaceMatrix));
 
       for (auto& obj : ctx.objects) {
+        renderSnakeShadow(shadowProgram);
         //if (obj->modelIndex == snakeModelIndex) continue; 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
         Model* model = ctx.models[obj->modelIndex];
         glm::mat4 modelMatrix = obj->transformMatrix * model->modelMatrix;
@@ -1232,6 +1260,7 @@ int main() {
           glBindVertexArray(ctx.programs[1]->VAO[obj->modelIndex]);
           glDrawArrays(model->drawMode, 0, model->numVertex);
         }
+
       }
 
       glBindFramebuffer(GL_FRAMEBUFFER, 0);
