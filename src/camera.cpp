@@ -82,3 +82,30 @@ void Camera::updateProjectionMatrix(float aspectRatio) {
 
   projectionMatrix = glm::perspective(FOV, aspectRatio, zNear, zFar);
 }
+
+void Camera::setPosition(const glm::vec3& pos) { position = pos; }
+void Camera::setLookAt(const glm::vec3& target) {
+  
+  glm::vec3 newFront = glm::normalize(target - position);
+
+  // 從 front 反推 rotation
+  constexpr glm::vec3 original_front(0, 0, -1);
+  constexpr glm::vec3 original_up(0, 1, 0);
+
+
+  glm::vec3 right = glm::normalize(glm::cross(newFront, glm::vec3(0, 1, 0)));
+  glm::vec3 up = glm::cross(right, newFront);
+
+  // 旋轉矩陣
+  glm::mat3 rotMat;
+  rotMat[0] = right;
+  rotMat[1] = up;
+  rotMat[2] = -newFront;
+
+  rotation = glm::quat_cast(rotMat);
+
+  front = newFront;
+  this->up = up;
+  this->right = right;
+  viewMatrix = glm::lookAt(position, target, glm::vec3(0, 1, 0));
+}

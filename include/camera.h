@@ -15,6 +15,8 @@ class Camera {
   const float* getProjectionMatrix() const { return glm::value_ptr(projectionMatrix); }
   const float* getViewMatrix() const { return glm::value_ptr(viewMatrix); }
   const float* getPosition() const { return glm::value_ptr(position); }
+  void setPosition(const glm::vec3& pos);
+  void setLookAt(const glm::vec3& target);
 
 private:
   glm::vec3 position;

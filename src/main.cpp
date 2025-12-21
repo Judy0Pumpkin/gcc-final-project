@@ -57,6 +57,8 @@ const int WIN_SCORE = 5;
 enum class GameResult { NONE, WIN, LOSE };
 GameResult gameResult = GameResult::NONE;
 
+bool snakeViewMode = false;  //true是蛇視角
+
 
 // 隨機數字生成器
 std::random_device rd;
@@ -483,62 +485,58 @@ Model* createSnakeModelSimple(Snake* snake) {
 }
 
 
-Model* createDirectionBox(const glm::vec3& startPos, const glm::vec3& direction, float width, float height,
-                         float depth) {  // 122111654 debug用。我想要把forwardDirection顯示出來
+Model* createDirectionBox(const glm::vec3& startPos, const glm::vec3& direction, float length, float width,
+                          float height) {
   Model* m = new Model();
 
   // 根據方向向量來確定長方體頂點
   glm::vec3 v[8];
-  glm::vec3 right = glm::normalize(glm::cross(direction, glm::vec3(0, 1, 0)));  // 計算左右方向
-  glm::vec3 up = glm::cross(direction, right);                                  // 計算上下方向
+  glm::vec3 right = glm::normalize(glm::cross(direction, glm::vec3(0, 1, 0)));
+  glm::vec3 up = glm::cross(direction, right);
 
-  // 計算每個頂點位置，基於startPos和方向
-  v[0] = startPos - direction * width - right * height - up * depth;  // 頂點 0
-  v[1] = startPos + direction * width - right * height - up * depth;  // 頂點 1
-  v[2] = startPos + direction * width + right * height - up * depth;  // 頂點 2
-  v[3] = startPos - direction * width + right * height - up * depth;  // 頂點 3
-  v[4] = startPos - direction * width - right * height + up * depth;  // 頂點 4
-  v[5] = startPos + direction * width - right * height + up * depth;  // 頂點 5
-  v[6] = startPos + direction * width + right * height + up * depth;  // 頂點 6
-  v[7] = startPos - direction * width + right * height + up * depth;  // 頂點 7
+  // 從 startPos 往 direction 方向延伸 length 長度
+  // 不再是從中心往兩邊延伸，而是從起點往前延伸
+  glm::vec3 endPos = startPos + direction * length;
 
+  // 計算每個頂點位置
+  v[0] = startPos - right * width - up * height;
+  v[1] = endPos - right * width - up * height;
+  v[2] = endPos + right * width - up * height;
+  v[3] = startPos + right * width - up * height;
+  v[4] = startPos - right * width + up * height;
+  v[5] = endPos - right * width + up * height;
+  v[6] = endPos + right * width + up * height;
+  v[7] = startPos + right * width + up * height;
 
   // 6 個面的索引
   int faces[24] = {
-      0, 3, 2, 1,  // 前
-      4, 5, 6, 7,  // 後
+      0, 3, 2, 1,  // 底
+      4, 5, 6, 7,  // 頂
       7, 3, 0, 4,  // 左
       5, 1, 2, 6,  // 右
-      4, 0, 1, 5,  // 下
-      6, 2, 3, 7,  // 上
+      4, 0, 1, 5,  // 後
+      6, 2, 3, 7,  // 前
   };
 
-
-  // 法線（每個面有一個法線）
+  // 法線
   glm::vec3 normals[6] = {
-      -up,         // 前
-      up,      // 後
-      -direction,       // 左
-      direction,      // 右
-      -right,          // 下
-      right          // 上
+      -up,         // 底
+      up,          // 頂
+      -right,      // 左
+      right,       // 右
+      -direction,  // 後
+      direction    // 前
   };
 
-  // UV坐標（將UV映射到不同的面）
+  // UV坐標
   for (int f = 0; f < 24; ++f) {
     glm::vec3 vertex = v[faces[f]];
     glm::vec3 normal = normals[f / 4];
 
-    float u, v;
-    u = (f % 4 < 2) ? 0.0f : 0.5f;
-    if (f % 4 == 1 || f % 4 == 2) {
-      v = 1.0f;
-    } else {
-      v = 0.0f;
-    }
+    float u, vCoord;
+    u = (f % 4 < 2) ? 0.0f : 1.0f;
+    vCoord = (f % 4 == 1 || f % 4 == 2) ? 1.0f : 0.0f;
 
-
-    // 添加頂點、法線和UV坐標到模型
     m->positions.push_back(vertex.x);
     m->positions.push_back(vertex.y);
     m->positions.push_back(vertex.z);
@@ -548,11 +546,12 @@ Model* createDirectionBox(const glm::vec3& startPos, const glm::vec3& direction,
     m->normals.push_back(normal.z);
 
     m->texcoords.push_back(u);
-    m->texcoords.push_back(v);
+    m->texcoords.push_back(vCoord);
   }
 
   m->numVertex = 24;
   m->drawMode = GL_QUADS;
+  
   m->textures.push_back(createTexture("../assets/models/snake/snake.jpg"));
 
   return m;
@@ -899,52 +898,77 @@ void renderSnake() {
   
     // --- 渲染長方體 --- 12211730 debug用 還在修正
     // 假設你的長方體已經建立並加入至模型
-    if (glm::length(snake->getForwardDirection()) >= 0.001f) {
-      Model* boxModel =
-          createDirectionBox(snake->getHeadPosition(), snake->getForwardDirection(), 0.3f, 0.01f, 0.01f);
-
-      glUseProgram(program);
-
-      glm::mat4 boxModelMatrix = glm::identity<glm::mat4>();
-      glUniformMatrix4fv(glGetUniformLocation(program, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(boxModelMatrix));
-
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, boxModel->textures[0]);
-      glUniform1i(glGetUniformLocation(program, "ourTexture"), 0);
-
-      std::vector<float> boxPositions = boxModel->positions;
-      std::vector<float> boxNormals = boxModel->normals;
-      std::vector<float> boxTexcoords = boxModel->texcoords;
-
-      GLuint boxVAO, boxVBO[3];
-      glGenVertexArrays(1, &boxVAO);
-      glGenBuffers(3, boxVBO);
-
-      glBindVertexArray(boxVAO);
-
-      glBindBuffer(GL_ARRAY_BUFFER, boxVBO[0]);
-      glBufferData(GL_ARRAY_BUFFER, boxPositions.size() * sizeof(float), boxPositions.data(), GL_DYNAMIC_DRAW);
-      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-      glEnableVertexAttribArray(0);
-
-      glBindBuffer(GL_ARRAY_BUFFER, boxVBO[1]);
-      glBufferData(GL_ARRAY_BUFFER, boxNormals.size() * sizeof(float), boxNormals.data(), GL_DYNAMIC_DRAW);
-      glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
-      glEnableVertexAttribArray(1);
-
-      glBindBuffer(GL_ARRAY_BUFFER, boxVBO[2]);
-      glBufferData(GL_ARRAY_BUFFER, boxTexcoords.size() * sizeof(float), boxTexcoords.data(), GL_DYNAMIC_DRAW);
-      glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
-      glEnableVertexAttribArray(2);
-
-      glDrawArrays(GL_QUADS, 0, boxModel->numVertex);
-
-      glBindVertexArray(0);
-      glBindTexture(GL_TEXTURE_2D, 0);
-      glDeleteVertexArrays(1, &boxVAO);
-      glDeleteBuffers(3, boxVBO);
+  // --- 渲染方向指示器 ---
+  if (glm::length(snake->getForwardDirection()) >= 0.001f) {
+    // 從第二個質點（身體）出發，不穿過頭
+    const auto& masses = snake->getMasses();
+    glm::vec3 startPos;
+    if (masses.size() >= 2) {
+      startPos = masses[0]->getPosition();  // 從第二節身體出發
+    } else {
+      startPos = snake->getHeadPosition();
     }
 
+    glm::vec3 direction = -snake->getForwardDirection();
+
+    // 參數：起點, 方向, 長度, 寬度, 高度
+    // 長度短一點 (0.15), 寬度是原本兩倍 (0.04)
+    Model* boxModel = createDirectionBox(startPos, snake->getForwardDirection(), 0.3f, 0.04f, 0.02f);
+
+    glUseProgram(program);
+
+    glm::mat4 boxModelMatrix = glm::identity<glm::mat4>();
+    glUniformMatrix4fv(glGetUniformLocation(program, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(boxModelMatrix));
+
+    // 設定紅色材質
+    glm::vec3 redAmbient(0.3f, 0.0f, 0.0f);
+    glm::vec3 redDiffuse(1.0f, 0.0f, 0.0f);
+    glm::vec3 redSpecular(0.5f, 0.2f, 0.2f);
+    float redShininess = 32.0f;
+
+    glUniform3fv(glGetUniformLocation(program, "material.ambient"), 1, glm::value_ptr(redAmbient));
+    glUniform3fv(glGetUniformLocation(program, "material.diffuse"), 1, glm::value_ptr(redDiffuse));
+    glUniform3fv(glGetUniformLocation(program, "material.specular"), 1, glm::value_ptr(redSpecular));
+    glUniform1f(glGetUniformLocation(program, "material.shininess"), redShininess);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, boxModel->textures[0]);
+    glUniform1i(glGetUniformLocation(program, "ourTexture"), 0);
+
+    std::vector<float> boxPositions = boxModel->positions;
+    std::vector<float> boxNormals = boxModel->normals;
+    std::vector<float> boxTexcoords = boxModel->texcoords;
+
+    GLuint boxVAO, boxVBO[3];
+    glGenVertexArrays(1, &boxVAO);
+    glGenBuffers(3, boxVBO);
+
+    glBindVertexArray(boxVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, boxVBO[0]);
+    glBufferData(GL_ARRAY_BUFFER, boxPositions.size() * sizeof(float), boxPositions.data(), GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, boxVBO[1]);
+    glBufferData(GL_ARRAY_BUFFER, boxNormals.size() * sizeof(float), boxNormals.data(), GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(1);
+
+    glBindBuffer(GL_ARRAY_BUFFER, boxVBO[2]);
+    glBufferData(GL_ARRAY_BUFFER, boxTexcoords.size() * sizeof(float), boxTexcoords.data(), GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(2);
+
+    glDrawArrays(GL_QUADS, 0, boxModel->numVertex);
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDeleteVertexArrays(1, &boxVAO);
+    glDeleteBuffers(3, boxVBO);
+
+    delete boxModel;  // 記得釋放記憶體！
+  }
   //glEnable(GL_CULL_FACE);
 }
 
@@ -1008,10 +1032,36 @@ int main() {
   float fpsTimer = 0.0f;
 
 
-  // 主渲染循環
+  
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
-    camera.move(window);
+   
+    if (snakeViewMode && snake) {
+      // 蛇視角模式
+      glm::vec3 headPos = snake->getHeadPosition();
+      glm::vec3 forwardDir = snake->getForwardDirection();
+
+      if (glm::length(forwardDir) < 0.001f) {
+        forwardDir = glm::vec3(0, 0, -1);
+      }
+
+      // 相機在在蛇頭後上方
+      float heightOffset = 1.5f;  // 高度偏移
+      float backOffset = 2.0f;    // 往後偏移
+
+      glm::vec3 cameraPos = headPos - forwardDir * backOffset + glm::vec3(0, heightOffset, 0);
+
+     
+      glm::vec3 lookAtPos = headPos + forwardDir * 1.0f;
+
+      camera.setPosition(cameraPos);
+      camera.setLookAt(lookAtPos);
+    } else {
+      // 自由視角模式
+      camera.move(window);
+    }
+
+
 
     float currentTime = (float)glfwGetTime();
     float deltaTime = currentTime - lastTime;
@@ -1495,6 +1545,15 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
           snake->setSnakeMoveDirection(2, true);
         }
         break;
+      case GLFW_KEY_Y: {
+        snakeViewMode = !snakeViewMode;
+        if (snakeViewMode) {
+          std::cout << "Snake View" << std::endl;
+        } else {
+          std::cout << "Free Camera" << std::endl;
+        }
+        break;
+      }
       default:
         break;
     }
