@@ -33,7 +33,7 @@ using namespace std;
 // ========== 全域變數 ==========
 Snake* snake = nullptr;
 int snakeModelIndex = -1;
-/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
 float simulationTime = 0.0f;
 
 enum class SnakeMode { LATERAL_UNDULATION, RECTILINEAR_PROGRESSION };
@@ -268,7 +268,7 @@ Model* createSnakeModelSimple(Snake* snake) {
 
   Model* m = new Model();
   const auto& masses = snake->getMasses();
-  float radius = 0.15f;
+  float radius = snake->getRadius();
 
   for (int i = 0; i < (int)masses.size(); ++i) {
     glm::vec3 pos = masses[i]->getPosition();
@@ -336,8 +336,8 @@ Model* createSnakeModelSimple(Snake* snake) {
 Model* initializeSnake() {
   std::cout << "\n=== Initializing Snake ===" << std::endl;
 
-  // 參數：節數, 質量, 每段長度, 彈簧常數, 阻尼, 起始位置
-  snake = new Snake(12, 0.3f, 0.4f, 0.5f, 3.5f, glm::vec3(2.0f, 0.5f, 2.5f));
+  // 參數：節數, 質量, 每段長度, 彈簧常數, 阻尼, 起始位置, 半徑
+  snake = new Snake(8, 0.020f, 0.25f, 1.0f, 3.5f, glm::vec3(2.0f, 0.5f, 2.5f), 0.1f);  // 12210456 i change k to 1.0f from 0.5f
 
   Model* snakeModel = createSnakeModelSimple(snake);
   // ctx.models.push_back(snakeModel); // 12202326 我想將他移到統一的地方，所以先試著註解掉
@@ -349,14 +349,24 @@ Model* initializeSnake() {
 
 
 // ========== 蛇更新 ==========
-/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
-void updateSnake(float deltaTime) {
+void updateSnake(float dtFrame) {
   if (!snake || snakeModelIndex < 0 || snakeModelIndex >= ctx.models.size()) {
     return;
   }
+  const float maxSubDt = 0.002f;  // 最大子步長 將每次更新的時間步長限制為 0.002 秒，相當於每秒更新 500 次
+                                  // 為了一步一步慢慢模擬，我先改成0.033，就是每秒30次模擬 by Ying
+  // 如果更新率小，dtFrame會變大，我們就多做幾次子步驟，讓模擬跟時間的關係比較合理一點 by Ying
+  // 根據每幀時間計算需要的子步數
+  int substeps = (int)std::ceil(dtFrame / maxSubDt);
+  if (substeps < 1) substeps = 1;
 
-  simulationTime += deltaTime;
-  snake->update(deltaTime, simulationTime);
+  // 每個子步長的時間
+  float dtSub = dtFrame / substeps;
+
+  // 執行每一個子步
+  for (int s = 0; s < substeps; ++s) {
+    snake->update(dtSub);
+  }
 
   // 更新渲染模型
   Model* oldModel = ctx.models[snakeModelIndex];
@@ -373,7 +383,9 @@ void updateSnake(float deltaTime) {
 
   delete newModel;
 }
-*/
+
+
+
 // ========== 載入模型 ==========
 void loadModels() {
   ctx.models.push_back(createPlane());  // 地板
@@ -393,29 +405,35 @@ void setupObjects() {
   //(*ctx.objects.rbegin())->material = mShinyred;
 
   // 蛇
-  ctx.objects.push_back(
-      new Object(snakeModelIndex, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, 0.0))));
+  //ctx.objects.push_back(new Object(snakeModelIndex, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, 0.0)))); //12210411原本想嘗試用這個框架的，但好像確實有渲染的問題，要改別的檔TwT，所以再改回去
+  
 
 
 }
 
 // ========== 渲染蛇 ==========
-/* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+
 void renderSnake() {
   if (!snake || snakeModelIndex < 0 || snakeModelIndex >= ctx.models.size()) {
     return;
   }
 
-  const auto& masses = snake->getMasses();
-  float radius = 0.15f;
+  //const auto& masses = snake->getMasses();
+  //float radius = 0.15f;
 
-  glDisable(GL_CULL_FACE);
+  //glDisable(GL_CULL_FACE);
   glUseProgram(ctx.programs[1]->getProgramId());
   GLuint program = ctx.programs[1]->getProgramId();
 
   glm::mat4 modelMatrix = glm::identity<glm::mat4>();
   glUniformMatrix4fv(glGetUniformLocation(program, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(modelMatrix));
 
+  // --- 補上貼圖處理 ---
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, ctx.models[snakeModelIndex]->textures[0]);
+  glUniform1i(glGetUniformLocation(program, "ourTexture"), 0);
+
+  /*
   // 為每個質點渲染立方體
   for (size_t i = 0; i < masses.size(); ++i) {
     glm::vec3 pos = masses[i]->getPosition();
@@ -450,6 +468,12 @@ void renderSnake() {
       norms.insert(norms.end(), {normal.x, normal.y, normal.z});
       texcoords.insert(texcoords.end(), {0.0f, 0.0f});
     }
+    */
+
+  std::vector<float> positions, norms, texcoords;
+  positions = ctx.models[snakeModelIndex]->positions;
+  norms = ctx.models[snakeModelIndex]->normals;
+  texcoords = ctx.models[snakeModelIndex]->texcoords;
 
     // 創建臨時 VAO 和 VBO
     GLuint vao, vbo[3];
@@ -473,16 +497,17 @@ void renderSnake() {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(2);
 
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glDrawArrays(GL_QUADS, 0, ctx.models[snakeModelIndex]->numVertex);
 
     glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(3, vbo);
-  }
+  
 
-  glEnable(GL_CULL_FACE);
+  //glEnable(GL_CULL_FACE);
 }
-*/
+
 // ========== 主程式 ==========
 int main() {
   initOpenGL();
@@ -509,22 +534,20 @@ int main() {
   ImGui::StyleColorsDark();
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init("#version 330 core");
+  float lastTime = (float)glfwGetTime();
 
   // 主渲染循環
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
     camera.move(window);
 
-    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
     float currentTime = (float)glfwGetTime();
-    static float lastTime = 0.0f;
     float deltaTime = currentTime - lastTime;
     lastTime = currentTime;
-    if (deltaTime > 0.05f) deltaTime = 0.05f;
-    */
+    if (deltaTime > 0.03f) deltaTime = 0.03f; // 12210108 我改成0.03，沒有太嚴謹的考據（問ai的），我們因為物理模擬很多，最好不要太大，但我也不知道跟0.05到底有沒有差
 
     // 蛇控制
-    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態 更12210116 我正在將這個部分更改到 keyCallback，實際操作改到update之類的地方
     if (snake) {
       bool shouldMove = false;
 
@@ -560,11 +583,11 @@ int main() {
       }
     }
     */
-    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+    
     updateSnake(deltaTime);
     
-    glDisable(GL_CULL_FACE);
-    */
+    //glDisable(GL_CULL_FACE); // 12210216這個我不太懂，但我覺得應該沒差？
+    
     // Shadow pass - Direction light
     if (ctx.directionLightEnable) {
       glm::vec3 lightDir = glm::normalize(ctx.directionLightDirection);
@@ -695,9 +718,9 @@ int main() {
     for (size_t i = 0; i < ctx.programs.size(); i++) {
       ctx.programs[i]->doMainLoop();
     }
-    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+    
     renderSnake();
-
+    /*
     // ImGui
     glDisable(GL_CULL_FACE);
     */
@@ -797,25 +820,49 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         ctx.spotLightCutOffEnable = !ctx.spotLightCutOffEnable;
         break;
       }
-        /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+        
       case GLFW_KEY_M: {
         if (snake) {
-          if (currentSnakeMode == SnakeMode::LATERAL_UNDULATION) {
-            currentSnakeMode = SnakeMode::RECTILINEAR_PROGRESSION;
+          if (snake->getMode() == Snake::MovementMode::LATERAL) {
             snake->setMovementMode(Snake::MovementMode::RECTILINEAR);
             std::cout << "Switched to RECTILINEAR PROGRESSION" << std::endl;
-          } else {
-            currentSnakeMode = SnakeMode::LATERAL_UNDULATION;
+          } else if (snake->getMode() == Snake::MovementMode::RECTILINEAR) {
+            snake->setMovementMode(Snake::MovementMode::SIMPLE);
+            std::cout << "Switched to SIMPLE MOVEMENT" << std::endl;
+          } else if (snake->getMode() == Snake::MovementMode::SIMPLE) {
             snake->setMovementMode(Snake::MovementMode::LATERAL);
             std::cout << "Switched to LATERAL UNDULATION" << std::endl;
           }
         }
         break;
       }
-      */
+      
+      case GLFW_KEY_I:// 我故意沒設定倒退的（總覺得怪，不知道如何處理
+        snake->setSnakeMoveDirection(0, true);
+        break;
+      case GLFW_KEY_J:
+        snake->setSnakeMoveDirection(1, true);
+        break;
+      case GLFW_KEY_L:
+        snake->setSnakeMoveDirection(2, true);
+        break;
       default:
         break;
     }
+  } else if (action == GLFW_RELEASE) {
+      switch (key) {
+          case GLFW_KEY_I:
+          snake->setSnakeMoveDirection(0, false);
+          break;
+        case GLFW_KEY_J:
+          snake->setSnakeMoveDirection(1, false);
+          break;
+        case GLFW_KEY_L:
+          snake->setSnakeMoveDirection(2, false);
+          break;
+        default:
+          break;
+      }
   }
 }
 

@@ -10,7 +10,7 @@
 // ========== 構造與析構 ==========
 
 Snake::Snake(int numSegments, float segmentMass, float segmentLength, float springK, float damping,
-             const glm::vec3& startPos)
+             const glm::vec3& startPos, float radius)
     : numSegments(numSegments),
       segmentMass(segmentMass),
       segmentLength(segmentLength),
@@ -19,12 +19,11 @@ Snake::Snake(int numSegments, float segmentMass, float segmentLength, float spri
       /*  // 小阻尼 12302303 先將這個隱藏
       forwardDirection(1.0f, 0.0f, 0.0f),
       targetDirection(1.0f, 0.0f, 0.0f),
-      waveAmplitude(3.0f),
-      waveFrequency(1.2f),
-      waveSpeed(2.0f),
-      isMoving(false),*/
-      groundHeight(0.6f) /*,
-      movementMode(MovementMode::LATERAL)*/ {
+      waveSpeed(2.0f),*/
+      isMoving(false),
+      groundHeight(0.6f) ,
+      movementMode(MovementMode::RECTILINEAR),
+      radius(radius) {
   std::cout << "Creating snake with " << numSegments << " segments..." << std::endl;
   createMassSpringSystem(startPos);
   std::cout << "Snake created successfully!" << std::endl;
@@ -51,28 +50,53 @@ void Snake::createMassSpringSystem(const glm::vec3& startPos) {
   }
 }
 
-// ========== 主更新循環 ==========
-/* 12202303 先將這個隱藏
-void Snake::update(float dt, float time) {
-  if (dt > 0.016f) dt = 0.016f;  // 限制最大時間步
+void Snake::setSnakeMoveDirection(int index, bool value) {
+  snakeMoveDirection[index] = value;
+  if (snakeMoveDirection[0] || snakeMoveDirection[1] || snakeMoveDirection[2]) {
+    startMoving();
+  } else {
+    stopMoving();
+  }
+}
 
-  const int subSteps = 8;
-  float subDt = dt / subSteps;
+// ========== 主更新 ==========
 
-  for (int step = 0; step < subSteps; ++step) {
-    float currentTime = time + step * subDt;
-
+void Snake::update(float dt) {
+  
     // 1. 清空上一幀的力
     for (auto* mass : masses) {
       mass->resetForce();
     }
 
     // 2. 更新前進方向
-    updateForwardDirection();
+    //updateForwardDirection();
 
     // 3. 施加重力
+    /*
     for (auto* mass : masses) {
       mass->applyForce(glm::vec3(0, -10.0f * mass->getMass(), 0));
+    }*/
+
+    
+
+    // 5. 運動力（根據模式選擇）
+    
+    if (isMoving) {
+      if (movementMode == MovementMode::SIMPLE) {// && snakeMoveDirection[0] == true
+        masses[0]->applyForce(getHeadDirection() * FRICTION_FORWARD);  // 頭部施加前進力
+      } else if (movementMode == MovementMode::LATERAL) {
+        //applyLateralUndulation();  // S形波動
+      } else if (movementMode == MovementMode::RECTILINEAR) {
+        applyRectilinearProgression();  // 直線蠕動
+      }
+      movementTimer += dt;
+      if (movementTimer > 10.0f / waveFrequencyRectilinear) {  // 我寫10只是為了不要讓1/waveFrequency太小
+        movementTimer -= 10.0f / waveFrequencyRectilinear;
+      }
+    } else {
+      for (int i = 0; i < axialSprings.size(); ++i) {
+        axialSprings[i]->setRestLength(segmentLength);
+      }
     }
 
     // 4. 彈簧力
@@ -80,40 +104,34 @@ void Snake::update(float dt, float time) {
       spring->applyForce();
     }
 
-    // 5. 運動力（根據模式選擇）
-    if (isMoving) {
-      if (movementMode == MovementMode::LATERAL) {
-        applyLateralUndulation(currentTime);  // S形波動
-      } else {
-        applyRectilinearProgression(currentTime);  // 直線蠕動
-      }
-    }
-
     // 6. 轉向力
-    applySteeringForce();
+    //applySteeringForce();
 
     // 7. 地面摩擦
+    applyDirectionalFriction();
+    
     for (size_t i = 0; i < masses.size(); ++i) {
-      applyGroundFriction(masses[i], i, currentTime);
+      applyGroundFriction(masses[i], dt);
     }
-
+    
     // 8. 更新位置和速度
     for (auto* mass : masses) {
-      mass->update(subDt);
+      mass->update(dt);
     }
 
     // 9. 地面碰撞
+    /*
     for (auto* mass : masses) {
       handleGroundCollision(mass);
-    }
+    }*/
 
     // 10. 防止過度拉伸
-    enforceSoftDistanceConstraints();
-  }
+    //enforceSoftDistanceConstraints();
+  
 }
 
 // ========== 物理約束 ==========
-
+/* 12202303 先將這個隱藏
 void Snake::enforceSoftDistanceConstraints() {
   for (size_t i = 0; i < masses.size() - 1; ++i) {
     glm::vec3 pos1 = masses[i]->getPosition();
@@ -151,9 +169,23 @@ void Snake::handleGroundCollision(Mass* mass) {
     mass->setVelocity(vel);
   }
 }
-
+*/
 // ========== 方向控制 ==========
+glm::vec3 Snake::getHeadDirection() const {
+  if (masses.size() < 2) return glm::vec3(0, 0, 0);
 
+  
+    glm::vec3 dir = masses[0]->getPosition() - masses[1]->getPosition();
+    dir.y = 0.0f;
+    float len = glm::length(dir);
+    if (len > 0.001f) {
+      dir= dir / len;
+    }else{
+      dir = glm::vec3(0, 0, 0);
+  }
+    return dir;
+}
+/*
 void Snake::updateForwardDirection() {
   if (masses.size() < 2) return;
 
@@ -208,45 +240,42 @@ void Snake::applySteeringForce() {
   // 平滑更新方向
   forwardDirection = glm::normalize(forwardDirection + (targetDir - currentDir) * 0.03f);
 }
-
+*/
 // ========== 運動模式 ==========
-
-void Snake::applyLateralUndulation(float time) {
+/*
+void Snake::applyLateralUndulation() {
   if (!isMoving || masses.size() < 3) return;
 
-  glm::vec3 up(0.0f, 1.0f, 0.0f);
-  glm::vec3 lateralDir = glm::normalize(glm::cross(forwardDirection, up));
+  //glm::vec3 up(0.0f, 1.0f, 0.0f);
+  //glm::vec3 lateralDir = glm::normalize(glm::cross(forwardDirection, up));
 
   // S形波動
   for (size_t i = 1; i < masses.size(); ++i) {
-    float phase = (float)i / masses.size() * 2.0f * M_PI;
-    float wave = waveAmplitude * sin(waveFrequency * time * 2.0f * M_PI + phase);
-    float forceMagnitude = wave * 6.0f;
+    float phase = (float)i / waveLength * 2.0f * M_PI;
+    float wave = waveAmplitude * sin(waveFrequency * movementTimer * 2.0f * M_PI + phase);
+    //float forceMagnitude = wave * 6.0f;
 
-    masses[i]->applyForce(lateralDir * forceMagnitude);
+    //masses[i]->applyForce(lateralDir * forceMagnitude);
   }
 
-  masses[0]->applyForce(forwardDirection * 2.0f);
-}
+  //masses[0]->applyForce(forwardDirection * 2.0f);
+}*/
 
-void Snake::applyRectilinearProgression(float time) {
+void Snake::applyRectilinearProgression() {
   if (!isMoving || masses.size() < 3) return;
 
-  float numWaves = 2.0f;
-  float waveK = 2.0f * M_PI * numWaves / masses.size();
-  float omega = waveFrequency * 2.0f * M_PI;
+  float omega = waveFrequencyRectilinear * 2.0f * M_PI;
 
-  for (size_t i = 0; i < masses.size(); ++i) {
-    float spatialPhase = waveK * (float)i;
-    float temporalPhase = omega * time;
+  for (int i = 0; i < axialSprings.size(); ++i) {
+    float spatialPhase = 2.0f * M_PI * (float)(i % waveLength) / waveLength;
+    float temporalPhase = omega * movementTimer;
     float wave = sin(temporalPhase - spatialPhase);
 
     // 修改彈簧長度產生蠕動
-    if (i < axialSprings.size()) {
-      float lengthMod = 1.0f - 0.15f * wave;
-      axialSprings[i]->setRestLength(segmentLength * lengthMod);
-    }
+    float lengthMod = 1.0f - waveAmplitudeRectilinear * wave;
+    axialSprings[i]->setRestLength(segmentLength * lengthMod);
 
+    /*
     // 收縮時推進
     if (wave > 0.3f && i > 0) {
       glm::vec3 localDir = forwardDirection;
@@ -261,14 +290,66 @@ void Snake::applyRectilinearProgression(float time) {
       }
       masses[i]->applyForce(localDir * 2.0f * wave);
     }
+    */
   }
 
-  masses[0]->applyForce(forwardDirection * 1.0f);
+  //masses[0]->applyForce(forwardDirection * 1.0f);
 }
 
 // ========== 摩擦力 ==========
 
-void Snake::applyGroundFriction(Mass* mass, size_t index, float time) {
+void Snake::applyGroundFriction(Mass* mass, float dt) {  // 如果覺得摩擦力太大可以調小groundFrictionCoeff或質量
+    glm::vec3 dir = mass->getNewVelocity(dt);
+    dir.y = 0.0f;
+    float len = glm::length(dir);
+    if (len < 0.001f) return;
+    dir = glm::normalize(dir);
+
+    glm::vec3 frictionForce = -dir * groundFrictionCoeff * mass->getMass() * GRAVITY;
+    // 根據行進方向施加摩擦力
+    mass->applyForce(frictionForce);
+}
+
+
+void Snake::applyDirectionalFriction() {
+  if (masses.size() < 2) return;
+  for (int i = 0;i<masses.size();++i) {
+    Mass* mass = masses[i];
+    // 獲取質點的速度
+    glm::vec3 velocity = mass->getVelocity();
+
+    // 如果質點的速度接近零，則不施加摩擦
+    if (glm::length(velocity) < 0.001f) {
+      continue;
+    }
+    glm::vec3 dir;
+    if (i==0){
+      dir = masses[0]->getPosition() - masses[1]->getPosition();
+    } else if (i==masses.size()-1){
+      dir = masses[masses.size()-2]->getPosition() - masses[masses.size()-1]->getPosition();
+    } else {
+      dir = masses[i-1]->getPosition() - masses[i+1]->getPosition();
+    }
+    dir.y = 0.0f;
+    if (glm::length(dir)<0.001f){
+      continue;
+    }
+    dir = glm::normalize(dir);
+    
+    //消去向後的分量
+    if (glm::dot(velocity, dir)<0.0f){
+      velocity -= glm::dot(velocity, dir)*dir;
+    }
+
+    mass->setVelocity(velocity);
+  }
+}
+
+/*
+void Snake::applyDirectionalFriction(Mass* mass) {
+  
+
+  
   glm::vec3 pos = mass->getPosition();
   if (pos.y > groundHeight + 0.01f) return;
 
@@ -276,6 +357,7 @@ void Snake::applyGroundFriction(Mass* mass, size_t index, float time) {
   glm::vec3 horizontalVel(velocity.x, 0.0f, velocity.z);
 
   if (movementMode == MovementMode::LATERAL) {
+    
     // 非對稱摩擦（模擬蛇鱗）
     glm::vec3 up(0.0f, 1.0f, 0.0f);
     glm::vec3 lateralDir = glm::normalize(glm::cross(forwardDirection, up));
@@ -288,7 +370,7 @@ void Snake::applyGroundFriction(Mass* mass, size_t index, float time) {
     glm::vec3 frictionLateral = -0.6f * vLateral * lateralDir * mass->getMass() * 9.8f;
 
     mass->applyForce(frictionForward + frictionLateral);
-
+    
   } else {
     // 動態摩擦（蠕動模式）
     float waveNumber = 2.0f * M_PI / (masses.size() * 0.5f);
@@ -301,8 +383,10 @@ void Snake::applyGroundFriction(Mass* mass, size_t index, float time) {
       mass->applyForce(frictionForce);
     }
   }
+  
 }
-
+*/
+/*
 // ========== 控制介面 ==========
 
 void Snake::setTargetDirection(const glm::vec3& dir) {
@@ -323,8 +407,7 @@ void Snake::addForwardForce(float magnitude) {
     masses[i]->applyForce(forwardDirection * magnitude * weight);
   }
 }
-
+*/
 glm::vec3 Snake::getHeadPosition() const { return masses.empty() ? glm::vec3(0.0f) : masses[0]->getPosition(); }
 
-glm::vec3 Snake::getForwardDirection() const { return forwardDirection; }
-*/
+//glm::vec3 Snake::getForwardDirection() const { return forwardDirection; }

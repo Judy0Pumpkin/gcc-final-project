@@ -15,6 +15,10 @@ class Mass {
   glm::vec3 getPosition() const { return position; }
   glm::vec3 getVelocity() const { return velocity; }
   float getMass() const { return mass; }
+  glm::vec3 getNewVelocity(float dt) const {
+	glm::vec3 acceleration = force / mass;
+	return velocity + acceleration * dt;
+  }
 
   // setter
   void setPosition(const glm::vec3& pos) { position = pos; }
