@@ -21,7 +21,7 @@ Snake::Snake(int numSegments, float segmentMass, float segmentLength, float spri
       targetDirection(1.0f, 0.0f, 0.0f),
       waveSpeed(2.0f),*/
       isMoving(false),
-      groundHeight(0.6f) ,
+      groundHeight(radius) ,
       movementMode(MovementMode::RECTILINEAR),
       radius(radius) {
   std::cout << "Creating snake with " << numSegments << " segments..." << std::endl;
@@ -72,10 +72,10 @@ void Snake::update(float dt) {
     updateForwardDirection();
 
     // 3. 施加重力
-    /*
+    
     for (auto* mass : masses) {
-      mass->applyForce(glm::vec3(0, -10.0f * mass->getMass(), 0));
-    }*/
+      mass->applyForce(glm::vec3(0, -GRAVITY * mass->getMass(), 0));
+    }
 
     // 5. 運動力（根據模式選擇）
     
@@ -119,10 +119,10 @@ void Snake::update(float dt) {
     }
 
     // 9. 地面碰撞
-    /*
+    
     for (auto* mass : masses) {
       handleGroundCollision(mass);
-    }*/
+    }
 
     // 10. 防止過度拉伸
     //enforceSoftDistanceConstraints();
@@ -154,7 +154,7 @@ void Snake::enforceSoftDistanceConstraints() {
     }
   }
 }
-
+*/
 void Snake::handleGroundCollision(Mass* mass) {
   glm::vec3 pos = mass->getPosition();
 
@@ -163,12 +163,20 @@ void Snake::handleGroundCollision(Mass* mass) {
     mass->setPosition(pos);
 
     glm::vec3 vel = mass->getVelocity();
-    if (vel.y < 0) vel.y = 0;
-    vel *= 0.9f;  // 能量損失
+
+    // 1. 垂直方向：處理撞擊地面的反彈
+    if (vel.y < 0) {
+      vel.y = -vel.y * 0.2f;  // 撞地後微微反彈，但吸收 80% 能量
+    }
+
+    // 2. 水平方向：處理地面摩擦
+    vel.x *= 0.98f;  // 水平滑行阻力較小，保留 98%
+    vel.z *= 0.98f;
+
     mass->setVelocity(vel);
   }
 }
-*/
+
 // ========== 方向控制 ==========
 /* 12211252改回去用updatedForwardDirection
 glm::vec3 Snake::getHeadDirection() const {
@@ -269,7 +277,7 @@ void Snake::applySteeringForce() {
 }
 
 // ========== 運動模式 ==========
-/*
+/* 12211846 S型的應該還會需要參考這個
 void Snake::applyLateralUndulation() {
   if (!isMoving || masses.size() < 3) return;
 
@@ -339,40 +347,42 @@ void Snake::applyGroundFriction(Mass* mass) {  // 如果覺得摩擦力太大可
 
 
 void Snake::applyDirectionalFriction() {
-  if (masses.size() < 2) return;
-  for (int i = 0;i<masses.size();++i) {
-    Mass* mass = masses[i];
-    // 獲取質點的速度
-    glm::vec3 velocity = mass->getVelocity();
+  if (movementMode == MovementMode::RECTILINEAR) {
+    if (masses.size() < 2) return;
+    for (int i = 0; i < masses.size(); ++i) {
+      Mass* mass = masses[i];
+      // 獲取質點的速度
+      glm::vec3 velocity = mass->getVelocity();
 
-    // 如果質點的速度接近零，則不施加摩擦
-    if (glm::length(velocity) < 0.001f) {
-      continue;
-    }
-    glm::vec3 dir;
-    if (i==0){
-      dir = masses[0]->getPosition() - masses[1]->getPosition();
-    } else if (i==masses.size()-1){
-      dir = masses[masses.size()-2]->getPosition() - masses[masses.size()-1]->getPosition();
-    } else {
-      dir = masses[i-1]->getPosition() - masses[i+1]->getPosition();
-    }
-    dir.y = 0.0f;
-    if (glm::length(dir)<0.001f){
-      continue;
-    }
-    dir = glm::normalize(dir);
-    
-    //消去向後的分量
-    if (glm::dot(velocity, dir)<0.0f){
-      velocity -= glm::dot(velocity, dir)*dir;
-    }
+      // 如果質點的速度接近零，則不施加摩擦
+      if (glm::length(velocity) < 0.001f) {
+        continue;
+      }
+      glm::vec3 dir;
+      if (i == 0) {
+        dir = masses[0]->getPosition() - masses[1]->getPosition();
+      } else if (i == masses.size() - 1) {
+        dir = masses[masses.size() - 2]->getPosition() - masses[masses.size() - 1]->getPosition();
+      } else {
+        dir = masses[i - 1]->getPosition() - masses[i + 1]->getPosition();
+      }
+      dir.y = 0.0f;
+      if (glm::length(dir) < 0.001f) {
+        continue;
+      }
+      dir = glm::normalize(dir);
 
-    mass->setVelocity(velocity);
+      // 消去向後的分量
+      if (glm::dot(velocity, dir) < 0.0f) {
+        velocity -= glm::dot(velocity, dir) * dir;
+      }
+
+      mass->setVelocity(velocity);
+    }
   }
 }
 
-/*
+/* 12211846 S型的應該還會需要參考這個
 void Snake::applyDirectionalFriction(Mass* mass) {
   
 
@@ -413,7 +423,7 @@ void Snake::applyDirectionalFriction(Mass* mass) {
   
 }
 */
-/*
+/* 12211844 應該暫時不需要了，不確定
 // ========== 控制介面 ==========
 
 void Snake::setTargetDirection(const glm::vec3& dir) {

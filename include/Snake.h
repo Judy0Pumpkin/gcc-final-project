@@ -62,7 +62,7 @@ class Snake {
   void enforceSoftDistanceConstraints();*/
   void applySteeringForce();
   void updateTarget(float dt);
-  //void handleGroundCollision(Mass* mass);
+  void handleGroundCollision(Mass* mass);
   
   // 運動模式
   //void applyLateralUndulation();
@@ -103,7 +103,7 @@ class Snake {
   
   // 常數
   static constexpr float GRAVITY = 9.8f;
-  //static constexpr float GROUND_HEIGHT = 0.15f;
+  // static constexpr float GROUND_HEIGHT = 0.15f;
   static constexpr float FRICTION_FORWARD = 0.5f;
   //static constexpr float FRICTION_LATERAL = 3.0f;
 
