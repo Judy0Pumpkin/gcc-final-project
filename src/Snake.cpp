@@ -69,7 +69,7 @@ void Snake::update(float dt) {
     }
 
     // 2. 更新前進方向
-    //updateForwardDirection();
+    updateForwardDirection();
 
     // 3. 施加重力
     /*
@@ -77,13 +77,11 @@ void Snake::update(float dt) {
       mass->applyForce(glm::vec3(0, -10.0f * mass->getMass(), 0));
     }*/
 
-    
-
     // 5. 運動力（根據模式選擇）
     
     if (isMoving) {
       if (movementMode == MovementMode::SIMPLE) {// && snakeMoveDirection[0] == true
-        masses[0]->applyForce(getHeadDirection() * FRICTION_FORWARD);  // 頭部施加前進力
+        masses[0]->applyForce(forwardDirection * FRICTION_FORWARD);  // 頭部施加前進力
       } else if (movementMode == MovementMode::LATERAL) {
         //applyLateralUndulation();  // S形波動
       } else if (movementMode == MovementMode::RECTILINEAR) {
@@ -99,19 +97,20 @@ void Snake::update(float dt) {
       }
     }
 
+    // 6. 轉向力
+    updateTarget(dt);
+    applySteeringForce();
+
     // 4. 彈簧力
     for (auto* spring : axialSprings) {
       spring->applyForce();
     }
 
-    // 6. 轉向力
-    //applySteeringForce();
-
     // 7. 地面摩擦
     applyDirectionalFriction();
     
     for (size_t i = 0; i < masses.size(); ++i) {
-      applyGroundFriction(masses[i], dt);
+      applyGroundFriction(masses[i]);
     }
     
     // 8. 更新位置和速度
@@ -171,6 +170,7 @@ void Snake::handleGroundCollision(Mass* mass) {
 }
 */
 // ========== 方向控制 ==========
+/* 12211252改回去用updatedForwardDirection
 glm::vec3 Snake::getHeadDirection() const {
   if (masses.size() < 2) return glm::vec3(0, 0, 0);
 
@@ -184,13 +184,13 @@ glm::vec3 Snake::getHeadDirection() const {
       dir = glm::vec3(0, 0, 0);
   }
     return dir;
-}
-/*
+}*/
+
 void Snake::updateForwardDirection() {
   if (masses.size() < 2) return;
 
   glm::vec3 avgDir(0.0f);
-  int count = std::min(3, (int)masses.size() - 1);
+  int count = std::min(2, (int)masses.size()-1); // 12211759 for experiment, we can change this value
 
   for (int i = 0; i < count; ++i) {
     glm::vec3 dir = masses[i]->getPosition() - masses[i + 1]->getPosition();
@@ -203,44 +203,71 @@ void Snake::updateForwardDirection() {
 
   float avgLen = glm::length(avgDir);
   if (avgLen > 0.001f) {
-    glm::vec3 newDir = avgDir / avgLen;
-    forwardDirection = glm::normalize(forwardDirection * 0.7f + newDir * 0.3f);
+    forwardDirection = glm::normalize(avgDir);  // ori:forwardDirection * 0.7f + newDir * 0.3f
   }
 }
 
+void Snake::updateTarget(float dt) {
+  if (!isMoving || masses.size() < 2) {
+    targetDirection = forwardDirection;
+    return;
+  }
+  glm::vec3 currentdir = forwardDirection;
+  float curlen = glm::length(currentdir);
+  if (curlen < 0.001f) {
+    targetDirection = currentdir;
+    return;  // 不算了
+  }
+  currentdir = currentdir / curlen;
+  glm::vec3 up(0.0f, 1.0f, 0.0f);
+  glm::vec3 rightdir = glm::normalize(glm::cross(currentdir, up));
+  glm::vec3 dir(0.0f);
+  if (Snake::snakeMoveDirection[0]) {
+    dir += currentdir;  // 前
+  }
+  if (Snake::snakeMoveDirection[1]) {
+    dir += -rightdir;  // 左
+  }
+  if (Snake::snakeMoveDirection[2]) {
+    dir += rightdir;  // 右
+  }
+  float dirlen = glm::length(dir);
+  if (dirlen < 0.001f) {
+    targetDirection = currentdir;
+  } else {
+    targetDirection = dir / dirlen;
+  }
+}
 void Snake::applySteeringForce() {
   if (!isMoving || masses.size() < 2) return;
 
   glm::vec3 currentDir = forwardDirection;
-  glm::vec3 targetDir = targetDirection;
-
+  glm::vec3 targetDir = glm::normalize(targetDirection);  // normalize只是為了以防萬一
+  
   // 計算轉向角度
   glm::vec3 cross = glm::cross(currentDir, targetDir);
-  float turnAmount = cross.y;
+  float turnAmount = -cross.y;
 
   float dot = glm::dot(currentDir, targetDir);
   dot = glm::clamp(dot, -1.0f, 1.0f);
   float angleDiff = acos(dot);
 
   if (angleDiff < 0.01f) return;
-
+  
   // 計算側向方向
   glm::vec3 up(0.0f, 1.0f, 0.0f);
   glm::vec3 rightDir = glm::normalize(glm::cross(currentDir, up));
-
+  
   // 對前幾個節點施加轉向力
-  float steerStrength = springK * 0.8f * angleDiff;
   int numSteer = std::min(3, (int)masses.size());
-
   for (int i = 0; i < numSteer; ++i) {
     float weight = 1.0f - (float)i / numSteer;
-    masses[i]->applyForce(rightDir * turnAmount * steerStrength * weight);
+    masses[i]->applyForce(rightDir * turnAmount * steeringStrength * weight);
   }
-
   // 平滑更新方向
-  forwardDirection = glm::normalize(forwardDirection + (targetDir - currentDir) * 0.03f);
+  //forwardDirection = glm::normalize(forwardDirection * 0.8f + (targetDir - currentDir) * 0.2f);
 }
-*/
+
 // ========== 運動模式 ==========
 /*
 void Snake::applyLateralUndulation() {
@@ -298,8 +325,8 @@ void Snake::applyRectilinearProgression() {
 
 // ========== 摩擦力 ==========
 
-void Snake::applyGroundFriction(Mass* mass, float dt) {  // 如果覺得摩擦力太大可以調小groundFrictionCoeff或質量
-    glm::vec3 dir = mass->getNewVelocity(dt);
+void Snake::applyGroundFriction(Mass* mass) {  // 如果覺得摩擦力太大可以調小groundFrictionCoeff或質量
+    glm::vec3 dir = mass->getVelocity();
     dir.y = 0.0f;
     float len = glm::length(dir);
     if (len < 0.001f) return;
@@ -410,4 +437,4 @@ void Snake::addForwardForce(float magnitude) {
 */
 glm::vec3 Snake::getHeadPosition() const { return masses.empty() ? glm::vec3(0.0f) : masses[0]->getPosition(); }
 
-//glm::vec3 Snake::getForwardDirection() const { return forwardDirection; }
+glm::vec3 Snake::getForwardDirection() const { return forwardDirection; }

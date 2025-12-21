@@ -33,7 +33,7 @@ using namespace std;
 // ========== 全域變數 ==========
 Snake* snake = nullptr;
 int snakeModelIndex = -1;
-    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態
+    /* 12202116 標註為外加的部分，先將這個隱藏退回原本狀態 12211727 此處已無功用
 float simulationTime = 0.0f;
 
 enum class SnakeMode { LATERAL_UNDULATION, RECTILINEAR_PROGRESSION };
@@ -332,6 +332,82 @@ Model* createSnakeModelSimple(Snake* snake) {
   return m;
 }
 
+Model* createDirectionBox(const glm::vec3& startPos, const glm::vec3& direction, float width, float height,
+                         float depth) {  // 122111654 debug用。我想要把forwardDirection顯示出來
+  Model* m = new Model();
+
+  // 根據方向向量來確定長方體頂點
+  glm::vec3 v[8];
+  glm::vec3 right = glm::normalize(glm::cross(direction, glm::vec3(0, 1, 0)));  // 計算左右方向
+  glm::vec3 up = glm::cross(direction, right);                                  // 計算上下方向
+
+  // 計算每個頂點位置，基於startPos和方向
+  v[0] = startPos - direction * width - right * height - up * depth;  // 頂點 0
+  v[1] = startPos + direction * width - right * height - up * depth;  // 頂點 1
+  v[2] = startPos + direction * width + right * height - up * depth;  // 頂點 2
+  v[3] = startPos - direction * width + right * height - up * depth;  // 頂點 3
+  v[4] = startPos - direction * width - right * height + up * depth;  // 頂點 4
+  v[5] = startPos + direction * width - right * height + up * depth;  // 頂點 5
+  v[6] = startPos + direction * width + right * height + up * depth;  // 頂點 6
+  v[7] = startPos - direction * width + right * height + up * depth;  // 頂點 7
+
+
+  // 6 個面的索引
+  int faces[24] = {
+      0, 3, 2, 1,  // 前
+      4, 5, 6, 7,  // 後
+      7, 3, 0, 4,  // 左
+      5, 1, 2, 6,  // 右
+      4, 0, 1, 5,  // 下
+      6, 2, 3, 7,  // 上
+  };
+
+
+  // 法線（每個面有一個法線）
+  glm::vec3 normals[6] = {
+      -up,         // 前
+      up,      // 後
+      -direction,       // 左
+      direction,      // 右
+      -right,          // 下
+      right          // 上
+  };
+
+  // UV坐標（將UV映射到不同的面）
+  for (int f = 0; f < 24; ++f) {
+    glm::vec3 vertex = v[faces[f]];
+    glm::vec3 normal = normals[f / 4];
+
+    float u, v;
+    u = (f % 4 < 2) ? 0.0f : 0.5f;
+    if (f % 4 == 1 || f % 4 == 2) {
+      v = 1.0f;
+    } else {
+      v = 0.0f;
+    }
+
+
+    // 添加頂點、法線和UV坐標到模型
+    m->positions.push_back(vertex.x);
+    m->positions.push_back(vertex.y);
+    m->positions.push_back(vertex.z);
+
+    m->normals.push_back(normal.x);
+    m->normals.push_back(normal.y);
+    m->normals.push_back(normal.z);
+
+    m->texcoords.push_back(u);
+    m->texcoords.push_back(v);
+  }
+
+  m->numVertex = 24;
+  m->drawMode = GL_QUADS;
+  m->textures.push_back(createTexture("../assets/models/snake/snake.jpg"));
+
+  return m;
+}
+
+
 // ========== 蛇初始化 ==========
 Model* initializeSnake() {
   std::cout << "\n=== Initializing Snake ===" << std::endl;
@@ -356,6 +432,7 @@ void updateSnake(float dtFrame) {
   const float maxSubDt = 0.002f;  // 最大子步長 將每次更新的時間步長限制為 0.002 秒，相當於每秒更新 500 次
                                   // 為了一步一步慢慢模擬，我先改成0.033，就是每秒30次模擬 by Ying
   // 如果更新率小，dtFrame會變大，我們就多做幾次子步驟，讓模擬跟時間的關係比較合理一點 by Ying
+  // 函式除了時間更新方式有調整之外，其他部分都跟原本很像 by Ying
   // 根據每幀時間計算需要的子步數
   int substeps = (int)std::ceil(dtFrame / maxSubDt);
   if (substeps < 1) substeps = 1;
@@ -407,8 +484,6 @@ void setupObjects() {
   // 蛇
   //ctx.objects.push_back(new Object(snakeModelIndex, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, 0.0)))); //12210411原本想嘗試用這個框架的，但好像確實有渲染的問題，要改別的檔TwT，所以再改回去
   
-
-
 }
 
 // ========== 渲染蛇 ==========
@@ -433,7 +508,7 @@ void renderSnake() {
   glBindTexture(GL_TEXTURE_2D, ctx.models[snakeModelIndex]->textures[0]);
   glUniform1i(glGetUniformLocation(program, "ourTexture"), 0);
 
-  /*
+  /* 12211727 此處已無功用
   // 為每個質點渲染立方體
   for (size_t i = 0; i < masses.size(); ++i) {
     glm::vec3 pos = masses[i]->getPosition();
@@ -496,7 +571,6 @@ void renderSnake() {
     glBufferData(GL_ARRAY_BUFFER, texcoords.size() * sizeof(float), texcoords.data(), GL_DYNAMIC_DRAW);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(2);
-
     glDrawArrays(GL_QUADS, 0, ctx.models[snakeModelIndex]->numVertex);
 
     glBindVertexArray(0);
@@ -504,6 +578,53 @@ void renderSnake() {
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(3, vbo);
   
+    // --- 渲染長方體 --- 12211730 debug用 還在修正
+    // 假設你的長方體已經建立並加入至模型
+    if (glm::length(snake->getForwardDirection()) >= 0.001f) {
+      Model* boxModel =
+          createDirectionBox(snake->getHeadPosition(), snake->getForwardDirection(), 0.3f, 0.01f, 0.01f);
+
+      glUseProgram(program);
+
+      glm::mat4 boxModelMatrix = glm::identity<glm::mat4>();
+      glUniformMatrix4fv(glGetUniformLocation(program, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(boxModelMatrix));
+
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, boxModel->textures[0]);
+      glUniform1i(glGetUniformLocation(program, "ourTexture"), 0);
+
+      std::vector<float> boxPositions = boxModel->positions;
+      std::vector<float> boxNormals = boxModel->normals;
+      std::vector<float> boxTexcoords = boxModel->texcoords;
+
+      GLuint boxVAO, boxVBO[3];
+      glGenVertexArrays(1, &boxVAO);
+      glGenBuffers(3, boxVBO);
+
+      glBindVertexArray(boxVAO);
+
+      glBindBuffer(GL_ARRAY_BUFFER, boxVBO[0]);
+      glBufferData(GL_ARRAY_BUFFER, boxPositions.size() * sizeof(float), boxPositions.data(), GL_DYNAMIC_DRAW);
+      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+      glEnableVertexAttribArray(0);
+
+      glBindBuffer(GL_ARRAY_BUFFER, boxVBO[1]);
+      glBufferData(GL_ARRAY_BUFFER, boxNormals.size() * sizeof(float), boxNormals.data(), GL_DYNAMIC_DRAW);
+      glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+      glEnableVertexAttribArray(1);
+
+      glBindBuffer(GL_ARRAY_BUFFER, boxVBO[2]);
+      glBufferData(GL_ARRAY_BUFFER, boxTexcoords.size() * sizeof(float), boxTexcoords.data(), GL_DYNAMIC_DRAW);
+      glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+      glEnableVertexAttribArray(2);
+
+      glDrawArrays(GL_QUADS, 0, boxModel->numVertex);
+
+      glBindVertexArray(0);
+      glBindTexture(GL_TEXTURE_2D, 0);
+      glDeleteVertexArrays(1, &boxVAO);
+      glDeleteBuffers(3, boxVBO);
+    }
 
   //glEnable(GL_CULL_FACE);
 }
