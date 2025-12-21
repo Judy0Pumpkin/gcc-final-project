@@ -290,6 +290,45 @@ void respawnApple() { //新生一個蘋果
   std::cout << "[INFO] Apple respawned at: (" << applePosition.x << ", " << applePosition.z << ")" << std::endl;
 }
 
+void generateSphere(std::vector<float>& positions, std::vector<float>& normals, std::vector<float>& texcoords,
+                    const glm::vec3& center, float radius, int segments = 16, int rings = 12) {
+  // segments: 經度分段數 (水平)
+  // rings: 緯度分段數 (垂直)
+
+  for (int ring = 0; ring <= rings; ++ring) {
+    float theta = ring * M_PI / rings;  // 緯度角度 (0 到 π)
+    float sinTheta = sin(theta);
+    float cosTheta = cos(theta);
+
+    for (int seg = 0; seg <= segments; ++seg) {
+      float phi = seg * 2.0f * M_PI / segments;  // 經度角度 (0 到 2π)
+      float sinPhi = sin(phi);
+      float cosPhi = cos(phi);
+
+      // 計算球面上的點
+      float x = cosPhi * sinTheta;
+      float y = cosTheta;
+      float z = sinPhi * sinTheta;
+
+      // 頂點位置
+      glm::vec3 vertex = center + glm::vec3(x, y, z) * radius;
+      positions.push_back(vertex.x);
+      positions.push_back(vertex.y);
+      positions.push_back(vertex.z);
+
+      // 法線 從中心指向頂點（朝外）
+      normals.push_back(x);
+      normals.push_back(y);
+      normals.push_back(z);
+
+      // 紋理座標
+      float u = (float)seg / segments;
+      float v = (float)ring / rings;
+      texcoords.push_back(u);
+      texcoords.push_back(v);
+    }
+  }
+}
 
 
 Model* createTestBox() {  // 12202131 在隱藏掉外加snake的程式後，用來測試顯示是否有問題 更12202328 已不需要
@@ -370,68 +409,79 @@ Model* createSnakeModelSimple(Snake* snake) {
   const auto& masses = snake->getMasses();
   float radius = snake->getRadius();
 
+  const int segments = 16;
+  const int rings = 12;
+
+  std::vector<float> spherePositions;
+  std::vector<float> sphereNormals;
+  std::vector<float> sphereTexcoords;
+
   for (int i = 0; i < (int)masses.size(); ++i) {
     glm::vec3 pos = masses[i]->getPosition();
-    float r = radius;
 
-    // 立方體 8 個頂點
-    glm::vec3 v[8] = {pos + glm::vec3(-r, -r, -r), pos + glm::vec3(r, -r, -r), pos + glm::vec3(r, r, -r),
-                      pos + glm::vec3(-r, r, -r),  pos + glm::vec3(-r, -r, r), pos + glm::vec3(r, -r, r),
-                      pos + glm::vec3(r, r, r),    pos + glm::vec3(-r, r, r)};
+    spherePositions.clear();
+    sphereNormals.clear();
+    sphereTexcoords.clear();
 
-    // 6 個面的索引
-    int faces[24] = {
-        0, 3, 2, 1,  // 前
-        4, 5, 6, 7,  // 後
-        7, 3, 0, 4,  // 左
-        5, 1, 2, 6,  // 右
-        4, 0, 1, 5,  // 下
-        6, 2, 3, 7,   // 上
-    };
+    generateSphere(spherePositions, sphereNormals, sphereTexcoords, pos, radius, segments, rings);
 
-    // 6 個面的法線
-    glm::vec3 normals[6] = {glm::vec3(0, 0, -1), glm::vec3(0, 0, 1),  glm::vec3(-1, 0, 0),
-                            glm::vec3(1, 0, 0),  glm::vec3(0, -1, 0), glm::vec3(0, 1, 0)};
-
-    
-    for (int f = 0; f < 24; ++f) {
-      glm::vec3 vertex = v[faces[f]];
-      glm::vec3 normal = normals[f / 4];
-
-      // 第一節蛇頭的 texcoords 用左半邊 [0.0, 0.5]，蛇身用右半邊 [0.5, 1.0]
-      float u, v;
-
-      if (i == 0) {                      // 如果是蛇頭
-        u = (f % 4 < 2) ? 0.0f : 0.5f;
-      } else {                           // 蛇身
-        u = (f % 4 < 2) ? 0.5f : 1.0f;
-      }
-
-      if (f % 4 == 1 || f % 4 == 2) {
-        v = 1.0f;
+    // 調整紋理座標
+    for (size_t j = 0; j < sphereTexcoords.size(); j += 2) {
+      if (i == 0) {
+        sphereTexcoords[j] = sphereTexcoords[j] * 0.5f;
       } else {
-        v = 0.0f;
+        sphereTexcoords[j] = 0.5f + sphereTexcoords[j] * 0.5f;
       }
-
-      m->positions.push_back(vertex.x);
-      m->positions.push_back(vertex.y);
-      m->positions.push_back(vertex.z);
-
-      m->normals.push_back(normal.x);
-      m->normals.push_back(normal.y);
-      m->normals.push_back(normal.z);
-
-      m->texcoords.push_back(u);
-      m->texcoords.push_back(v);
     }
 
-    m->numVertex += 24;
+    // 生成三角形 - 修正繞序為逆時針（CCW）朝外
+    for (int ring = 0; ring < rings; ++ring) {
+      for (int seg = 0; seg < segments; ++seg) {
+        int i0 = ring * (segments + 1) + seg;
+        int i1 = i0 + segments + 1;
+        int i2 = i1 + 1;
+        int i3 = i0 + 1;
+
+        // 三角形 1: i0, i2, i1 (改變順序！)
+        // 從外面看是逆時針
+        for (int idx : {i0, i2, i1}) {
+          m->positions.push_back(spherePositions[idx * 3]);
+          m->positions.push_back(spherePositions[idx * 3 + 1]);
+          m->positions.push_back(spherePositions[idx * 3 + 2]);
+
+          m->normals.push_back(sphereNormals[idx * 3]);
+          m->normals.push_back(sphereNormals[idx * 3 + 1]);
+          m->normals.push_back(sphereNormals[idx * 3 + 2]);
+
+          m->texcoords.push_back(sphereTexcoords[idx * 2]);
+          m->texcoords.push_back(sphereTexcoords[idx * 2 + 1]);
+        }
+
+        // 三角形 2: i0, i3, i2 (改變順序！)
+        // 從外面看是逆時針
+        for (int idx : {i0, i3, i2}) {
+          m->positions.push_back(spherePositions[idx * 3]);
+          m->positions.push_back(spherePositions[idx * 3 + 1]);
+          m->positions.push_back(spherePositions[idx * 3 + 2]);
+
+          m->normals.push_back(sphereNormals[idx * 3]);
+          m->normals.push_back(sphereNormals[idx * 3 + 1]);
+          m->normals.push_back(sphereNormals[idx * 3 + 2]);
+
+          m->texcoords.push_back(sphereTexcoords[idx * 2]);
+          m->texcoords.push_back(sphereTexcoords[idx * 2 + 1]);
+        }
+
+        m->numVertex += 6;
+      }
+    }
   }
- 
+
   m->textures.push_back(createTexture("../assets/models/snake/snake.jpg"));
-  m->drawMode = GL_QUADS;
+  m->drawMode = GL_TRIANGLES;
   return m;
 }
+
 
 Model* createDirectionBox(const glm::vec3& startPos, const glm::vec3& direction, float width, float height,
                          float depth) {  // 122111654 debug用。我想要把forwardDirection顯示出來
@@ -598,8 +648,8 @@ Model* initializeSnake() {
 
 
 // ========== 蛇更新 ==========
-void updateSnake(float dtFrame) {
 
+void updateSnake(float dtFrame) {
   if (!snake || snakeModelIndex < 0 || snakeModelIndex >= ctx.models.size()) {
     return;
   }
@@ -620,44 +670,73 @@ void updateSnake(float dtFrame) {
 
   Model* model = ctx.models[snakeModelIndex];
 
-  // 清空舊資料
   model->positions.clear();
   model->normals.clear();
   model->texcoords.clear();
+  model->numVertex = 0;
 
-  // 直接填充新資料
   const auto& masses = snake->getMasses();
   float radius = snake->getRadius();
 
+  const int segments = 16;
+  const int rings = 12;
+
+  std::vector<float> spherePositions;
+  std::vector<float> sphereNormals;
+  std::vector<float> sphereTexcoords;
+
   for (int i = 0; i < (int)masses.size(); ++i) {
     glm::vec3 pos = masses[i]->getPosition();
-    float r = radius;
 
-    glm::vec3 v[8] = {pos + glm::vec3(-r, -r, -r), pos + glm::vec3(r, -r, -r), pos + glm::vec3(r, r, -r),
-                      pos + glm::vec3(-r, r, -r),  pos + glm::vec3(-r, -r, r), pos + glm::vec3(r, -r, r),
-                      pos + glm::vec3(r, r, r),    pos + glm::vec3(-r, r, r)};
+    spherePositions.clear();
+    sphereNormals.clear();
+    sphereTexcoords.clear();
 
-    int faces[24] = {0, 3, 2, 1, 4, 5, 6, 7, 7, 3, 0, 4, 5, 1, 2, 6, 4, 0, 1, 5, 6, 2, 3, 7};
+    generateSphere(spherePositions, sphereNormals, sphereTexcoords, pos, radius, segments, rings);
 
-    glm::vec3 normals[6] = {glm::vec3(0, 0, -1), glm::vec3(0, 0, 1),  glm::vec3(-1, 0, 0),
-                            glm::vec3(1, 0, 0),  glm::vec3(0, -1, 0), glm::vec3(0, 1, 0)};
+    for (size_t j = 0; j < sphereTexcoords.size(); j += 2) {
+      if (i == 0) {
+        sphereTexcoords[j] = sphereTexcoords[j] * 0.5f;
+      } else {
+        sphereTexcoords[j] = 0.5f + sphereTexcoords[j] * 0.5f;
+      }
+    }
 
-    for (int f = 0; f < 24; ++f) {
-      glm::vec3 vertex = v[faces[f]];
-      glm::vec3 normal = normals[f / 4];
+    // 生成三角形 - 使用修正後的繞序
+    for (int ring = 0; ring < rings; ++ring) {
+      for (int seg = 0; seg < segments; ++seg) {
+        int i0 = ring * (segments + 1) + seg;
+        int i1 = i0 + segments + 1;
+        int i2 = i1 + 1;
+        int i3 = i0 + 1;
 
-      float u = (i == 0) ? ((f % 4 < 2) ? 0.0f : 0.5f) : ((f % 4 < 2) ? 0.5f : 1.0f);
-      float v_coord = (f % 4 == 1 || f % 4 == 2) ? 1.0f : 0.0f;
+        // 三角形 1: i0, i2, i1 (逆時針朝外)
+        for (int idx : {i0, i2, i1}) {
+          model->positions.insert(model->positions.end(), {spherePositions[idx * 3], spherePositions[idx * 3 + 1],
+                                                           spherePositions[idx * 3 + 2]});
 
-      model->positions.insert(model->positions.end(), {vertex.x, vertex.y, vertex.z});
-      model->normals.insert(model->normals.end(), {normal.x, normal.y, normal.z});
-      model->texcoords.insert(model->texcoords.end(), {u, v_coord});
+          model->normals.insert(model->normals.end(),
+                                {sphereNormals[idx * 3], sphereNormals[idx * 3 + 1], sphereNormals[idx * 3 + 2]});
+
+          model->texcoords.insert(model->texcoords.end(), {sphereTexcoords[idx * 2], sphereTexcoords[idx * 2 + 1]});
+        }
+
+        // 三角形 2: i0, i3, i2 (逆時針朝外)
+        for (int idx : {i0, i3, i2}) {
+          model->positions.insert(model->positions.end(), {spherePositions[idx * 3], spherePositions[idx * 3 + 1],
+                                                           spherePositions[idx * 3 + 2]});
+
+          model->normals.insert(model->normals.end(),
+                                {sphereNormals[idx * 3], sphereNormals[idx * 3 + 1], sphereNormals[idx * 3 + 2]});
+
+          model->texcoords.insert(model->texcoords.end(), {sphereTexcoords[idx * 2], sphereTexcoords[idx * 2 + 1]});
+        }
+
+        model->numVertex += 6;
+      }
     }
   }
-
-  model->numVertex = model->positions.size() / 3;
 }
-
 // 檢測蛇頭是否碰到蘋果
 bool checkAppleCollision() {
   if (!snake || appleModelIndex < 0) return false;
@@ -765,102 +844,58 @@ void setupObjects() {
 }
 
 // ========== 渲染蛇 ==========
-
 void renderSnake() {
   if (!snake || snakeModelIndex < 0 || snakeModelIndex >= ctx.models.size()) {
     return;
   }
 
-  //const auto& masses = snake->getMasses();
-  //float radius = 0.15f;
-
-  //glDisable(GL_CULL_FACE);
   glUseProgram(ctx.programs[1]->getProgramId());
   GLuint program = ctx.programs[1]->getProgramId();
 
   glm::mat4 modelMatrix = glm::identity<glm::mat4>();
   glUniformMatrix4fv(glGetUniformLocation(program, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(modelMatrix));
 
-
   glUniform3fv(glGetUniformLocation(program, "material.ambient"), 1, glm::value_ptr(mFlatwhite.ambient));
   glUniform3fv(glGetUniformLocation(program, "material.diffuse"), 1, glm::value_ptr(mFlatwhite.diffuse));
   glUniform3fv(glGetUniformLocation(program, "material.specular"), 1, glm::value_ptr(mFlatwhite.specular));
   glUniform1f(glGetUniformLocation(program, "material.shininess"), mFlatwhite.shininess);
 
-  // --- 補上貼圖處理 ---
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, ctx.models[snakeModelIndex]->textures[0]);
   glUniform1i(glGetUniformLocation(program, "ourTexture"), 0);
 
-  /* 12211727 此處已無功用
-  // 為每個質點渲染立方體
-  for (size_t i = 0; i < masses.size(); ++i) {
-    glm::vec3 pos = masses[i]->getPosition();
-    float r = radius;
+  std::vector<float> positions = ctx.models[snakeModelIndex]->positions;
+  std::vector<float> norms = ctx.models[snakeModelIndex]->normals;
+  std::vector<float> texcoords = ctx.models[snakeModelIndex]->texcoords;
 
-    // 選擇材質：頭部綠色，身體紅色
-    Material* currentMat = (i == 0) ? &mGreenHead : &mShinyred;
+  GLuint vao, vbo[3];
+  glGenVertexArrays(1, &vao);
+  glGenBuffers(3, vbo);
 
-    glUniform3fv(glGetUniformLocation(program, "material.ambient"), 1, glm::value_ptr(currentMat->ambient));
-    glUniform3fv(glGetUniformLocation(program, "material.diffuse"), 1, glm::value_ptr(currentMat->diffuse));
-    glUniform3fv(glGetUniformLocation(program, "material.specular"), 1, glm::value_ptr(currentMat->specular));
-    glUniform1f(glGetUniformLocation(program, "material.shininess"), currentMat->shininess);
+  glBindVertexArray(vao);
 
-    // 立方體頂點
-    glm::vec3 v[8] = {pos + glm::vec3(-r, -r, -r), pos + glm::vec3(r, -r, -r), pos + glm::vec3(r, r, -r),
-                      pos + glm::vec3(-r, r, -r),  pos + glm::vec3(-r, -r, r), pos + glm::vec3(r, -r, r),
-                      pos + glm::vec3(r, r, r),    pos + glm::vec3(-r, r, r)};
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+  glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(float), positions.data(), GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(0);
 
-    int faces[36] = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 0, 4, 7, 7, 3, 0,
-                     1, 5, 6, 6, 2, 1, 0, 1, 5, 5, 4, 0, 3, 2, 6, 6, 7, 3};
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+  glBufferData(GL_ARRAY_BUFFER, norms.size() * sizeof(float), norms.data(), GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(1);
 
-    glm::vec3 normals[6] = {glm::vec3(0, 0, -1), glm::vec3(0, 0, 1),  glm::vec3(-1, 0, 0),
-                            glm::vec3(1, 0, 0),  glm::vec3(0, -1, 0), glm::vec3(0, 1, 0)};
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+  glBufferData(GL_ARRAY_BUFFER, texcoords.size() * sizeof(float), texcoords.data(), GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(2);
 
-    std::vector<float> positions, norms, texcoords;
+  // 改用 GL_TRIANGLES 繪製！
+  glDrawArrays(GL_TRIANGLES, 0, ctx.models[snakeModelIndex]->numVertex);
 
-    for (int f = 0; f < 36; ++f) {
-      glm::vec3 vertex = v[faces[f]];
-      glm::vec3 normal = normals[f / 6];
-
-      positions.insert(positions.end(), {vertex.x, vertex.y, vertex.z});
-      norms.insert(norms.end(), {normal.x, normal.y, normal.z});
-      texcoords.insert(texcoords.end(), {0.0f, 0.0f});
-    }
-    */
-
-  std::vector<float> positions, norms, texcoords;
-  positions = ctx.models[snakeModelIndex]->positions;
-  norms = ctx.models[snakeModelIndex]->normals;
-  texcoords = ctx.models[snakeModelIndex]->texcoords;
-
-    // 創建臨時 VAO 和 VBO
-    GLuint vao, vbo[3];
-    glGenVertexArrays(1, &vao);
-    glGenBuffers(3, vbo);
-
-    glBindVertexArray(vao);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-    glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(float), positions.data(), GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-    glBufferData(GL_ARRAY_BUFFER, norms.size() * sizeof(float), norms.data(), GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(1);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
-    glBufferData(GL_ARRAY_BUFFER, texcoords.size() * sizeof(float), texcoords.data(), GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(2);
-    glDrawArrays(GL_QUADS, 0, ctx.models[snakeModelIndex]->numVertex);
-
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glDeleteVertexArrays(1, &vao);
-    glDeleteBuffers(3, vbo);
+  glBindVertexArray(0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glDeleteVertexArrays(1, &vao);
+  glDeleteBuffers(3, vbo);
   
     // --- 渲染長方體 --- 12211730 debug用 還在修正
     // 假設你的長方體已經建立並加入至模型
@@ -912,6 +947,7 @@ void renderSnake() {
 
   //glEnable(GL_CULL_FACE);
 }
+
 
 // ========== 主程式 ==========
 int main() {
