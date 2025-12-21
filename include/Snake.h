@@ -28,6 +28,7 @@ class Snake {
   void stopMoving() { isMoving = false; }
   bool getIsMoving() const { return isMoving; }
   void setSnakeMoveDirection(int index, bool value);
+  void reset();
 
   // 模式
   void setMovementMode(MovementMode mode) { movementMode = mode; }
@@ -51,6 +52,8 @@ class Snake {
   float getWaveFrequency() const { return waveFrequencyRectilinear; }
   
  private:
+
+  std::vector<glm::vec3> initialPositions;
   void createMassSpringSystem(const glm::vec3& startPos);
 
   // 核心物理
@@ -88,7 +91,7 @@ class Snake {
   // 運動狀態
   glm::vec3 forwardDirection;
   glm::vec3 targetDirection;
-  float waveAmplitudeRectilinear = 5.0f; //如果覺得爬太慢了，調這個
+  float waveAmplitudeRectilinear = 10.0f; //如果覺得爬太慢了，調這個
   float waveFrequencyRectilinear = 1.2f;
   //float waveSpeed;
   bool isMoving;

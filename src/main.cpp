@@ -21,6 +21,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include <random> 
 
 #include "Snake.h"
 
@@ -29,6 +30,37 @@
 #endif
 
 using namespace std;
+int appleModelIndex = -1;
+glm::vec3 applePosition(4.0f, 0.5f, 2.5f);
+bool hitWall = false;
+int score = 0;
+
+const float FLOOR_WIDTH = 8.192f * 1.0f;
+const float FLOOR_DEPTH = 5.12f * 1.0f;
+const float FLOOR_CENTER_X = FLOOR_WIDTH / 2.0f;
+const float FLOOR_CENTER_Z = FLOOR_DEPTH / 2.0f;
+const float WALL_HEIGHT = 1.0f;
+const float WALL_THICKNESS = 0.2f;
+
+int wallModelIndices[4] = {-1, -1, -1, -1};  // 牆壁 前、後、左、右
+
+bool pause = false;
+
+enum class GameState { STOPPED, RUNNING, PAUSED };
+GameState gameState = GameState::STOPPED;
+
+float gameTimer = 60.0f;  
+float elapsedTime = 0.0f;  
+const int WIN_SCORE = 1;  
+
+// 遊戲結果
+enum class GameResult { NONE, WIN, LOSE };
+GameResult gameResult = GameResult::NONE;
+
+
+// 隨機數字生成器
+std::random_device rd;
+std::mt19937 gen(rd());
 
 // ========== 全域變數 ==========
 Snake* snake = nullptr;
@@ -149,10 +181,10 @@ void initShadowMap() {
 Model* createPlane() {
   Model* m = new Model();
 
-  float width = 8.192f;
-  float depth = 5.12f;
-  float centerX = 4.096f;
-  float centerZ = 2.56f;
+  float width = FLOOR_WIDTH;
+  float depth = FLOOR_DEPTH;
+  float centerX = FLOOR_CENTER_X;
+  float centerZ = FLOOR_CENTER_Z;
   float y = 0.0f;
 
   float halfWidth = width / 2.0f;
@@ -165,8 +197,9 @@ Model* createPlane() {
 
   glm::vec3 normal(0.0f, 1.0f, 0.0f);
 
-  float uRepeat = 2.0f;
-  float vRepeat = 2.0f;
+  // 貼圖
+  float uRepeat = 10.0f;
+  float vRepeat = 10.0f;
 
   glm::vec2 t0(0.0f, 0.0f);
   glm::vec2 t1(0.0f, vRepeat);
@@ -191,6 +224,73 @@ Model* createPlane() {
 
   return m;
 }
+
+glm::vec3 generateRandomApplePosition() {
+  // 在地板範圍內隨機生成位置
+  float margin = 1.0f;
+  std::uniform_real_distribution<float> distX(margin, FLOOR_WIDTH - margin);
+  std::uniform_real_distribution<float> distZ(margin, FLOOR_DEPTH - margin);
+
+  return glm::vec3(distX(gen), 0.4f, distZ(gen));
+}
+
+
+Model* createApple() {
+  Model* m = Model::fromObjectFile("../assets/apple/Apple.obj");
+
+  if (!m) {
+    std::cout << "[ERROR] Failed to load Apple.obj!" << std::endl;
+    return nullptr;
+  }
+
+  std::cout << "[DEBUG] Apple loaded! Vertices: " << m->numVertex << std::endl;
+
+  m->textures.push_back(createTexture("../assets/apple/Apple_BaseColor.png"));
+
+  // 初始位置隨機生成
+  applePosition = glm::vec3(3.0f, 0.4f, 3.0f);
+
+  m->modelMatrix = glm::identity<glm::mat4>();
+  m->modelMatrix = glm::translate(m->modelMatrix, applePosition);
+  m->modelMatrix = glm::scale(m->modelMatrix, glm::vec3(0.008f)); //蘋果大小
+  m->drawMode = GL_TRIANGLES;
+
+  std::cout << "[INFO] Apple spawned at: (" << applePosition.x << ", " << applePosition.z << ")" << std::endl;
+
+  return m;
+}
+
+
+void respawnFirstApple() {  //新生一個蘋果
+  applePosition = glm::vec3(3.0f, 0.4f, 3.0f);
+
+  // 更新蘋果的 modelMatrix
+  if (appleModelIndex >= 0 && appleModelIndex < ctx.models.size()) {
+    Model* apple = ctx.models[appleModelIndex];
+    apple->modelMatrix = glm::identity<glm::mat4>();
+    apple->modelMatrix = glm::translate(apple->modelMatrix, applePosition);
+    apple->modelMatrix = glm::scale(apple->modelMatrix, glm::vec3(0.008f));  // 蘋果大小
+  }
+
+  std::cout << "[INFO] Apple respawned at: (" << applePosition.x << ", " << applePosition.z << ")" << std::endl;
+}
+
+
+void respawnApple() { //新生一個蘋果
+  applePosition = generateRandomApplePosition();
+
+  // 更新蘋果的 modelMatrix
+  if (appleModelIndex >= 0 && appleModelIndex < ctx.models.size()) {
+    Model* apple = ctx.models[appleModelIndex];
+    apple->modelMatrix = glm::identity<glm::mat4>();
+    apple->modelMatrix = glm::translate(apple->modelMatrix, applePosition);
+    apple->modelMatrix = glm::scale(apple->modelMatrix, glm::vec3(0.008f));   // 蘋果大小
+  }
+
+  std::cout << "[INFO] Apple respawned at: (" << applePosition.x << ", " << applePosition.z << ")" << std::endl;
+}
+
+
 
 Model* createTestBox() {  // 12202131 在隱藏掉外加snake的程式後，用來測試顯示是否有問題 更12202328 已不需要
   Model* m = new Model();
@@ -327,6 +427,7 @@ Model* createSnakeModelSimple(Snake* snake) {
 
     m->numVertex += 24;
   }
+ 
   m->textures.push_back(createTexture("../assets/models/snake/snake.jpg"));
   m->drawMode = GL_QUADS;
   return m;
@@ -407,21 +508,93 @@ Model* createDirectionBox(const glm::vec3& startPos, const glm::vec3& direction,
   return m;
 }
 
+Model* createWall(float width, float height, float depth, glm::vec3 position, glm::vec3 normal_dir) {
+  Model* m = new Model();
 
-// ========== 蛇初始化 ==========
+  glm::vec3 n = glm::normalize(normal_dir);
+
+ 
+  std::vector<glm::vec3> vertices;
+
+  if (abs(n.z) > 0.5f) {
+    // 前後牆
+    float hw = width / 2.0f;
+    vertices = {position + glm::vec3(-hw, 0, 0), position + glm::vec3(hw, 0, 0), position + glm::vec3(hw, height, 0),
+                position + glm::vec3(-hw, height, 0)};
+  } else {
+    // 左右牆
+    float hd = depth / 2.0f;
+    vertices = {position + glm::vec3(0, 0, hd), position + glm::vec3(0, 0, -hd), position + glm::vec3(0, height, -hd),
+                position + glm::vec3(0, height, hd)};
+  }
+
+  // 正面朝向場地內部
+  int order[6];
+  if (n.z > 0 || n.x > 0) {
+  
+    order[0] = 0;
+    order[1] = 1;
+    order[2] = 2;
+    order[3] = 0;
+    order[4] = 2;
+    order[5] = 3;
+  } else {
+
+    order[0] = 0;
+    order[1] = 2;
+    order[2] = 1;
+    order[3] = 0;
+    order[4] = 3;
+    order[5] = 2;
+  }
+
+  // 三角形 1
+  for (int i = 0; i < 3; i++) {
+    m->positions.push_back(vertices[order[i]].x);
+    m->positions.push_back(vertices[order[i]].y);
+    m->positions.push_back(vertices[order[i]].z);
+    m->normals.push_back(n.x);
+    m->normals.push_back(n.y);
+    m->normals.push_back(n.z);
+  }
+  m->texcoords.insert(m->texcoords.end(), {0, 0, 1, 0, 1, 1});
+
+  // 三角形 2
+  for (int i = 3; i < 6; i++) {
+    m->positions.push_back(vertices[order[i]].x);
+    m->positions.push_back(vertices[order[i]].y);
+    m->positions.push_back(vertices[order[i]].z);
+    m->normals.push_back(n.x);
+    m->normals.push_back(n.y);
+    m->normals.push_back(n.z);
+  }
+  m->texcoords.insert(m->texcoords.end(), {0, 0, 1, 1, 0, 1});
+
+  m->numVertex = 6;
+  m->drawMode = GL_TRIANGLES;
+  m->textures.push_back(createTexture("../assets/models/Wood_maps/AT_Wood.jpg"));
+
+  return m;
+}
+
 Model* initializeSnake() {
   std::cout << "\n=== Initializing Snake ===" << std::endl;
 
+  // 起始位置在地板中央
+  glm::vec3 startPos(FLOOR_CENTER_X, 0.5f, FLOOR_CENTER_Z);
+
   // 參數：節數, 質量, 每段長度, 彈簧常數, 阻尼, 起始位置, 半徑
-  snake = new Snake(8, 0.020f, 0.25f, 1.0f, 3.5f, glm::vec3(2.0f, 0.5f, 2.5f), 0.1f);  // 12210456 i change k to 1.0f from 0.5f
+  snake = new Snake(8, 0.020f, 0.25f, 1.0f, 3.5f, startPos, 0.1f);  // 12210456 i change k to 1.0f from 0.5f
 
   Model* snakeModel = createSnakeModelSimple(snake);
+
   // ctx.models.push_back(snakeModel); // 12202326 我想將他移到統一的地方，所以先試著註解掉
   // snakeModelIndex = ctx.models.size() - 1; // 12202326 我想將他移到統一的地方，所以先試著註解掉
 
-  std::cout << "Snake initialized!" << std::endl;
+  std::cout << "Snake initialized at center!" << std::endl;
   return snakeModel;
 }
+
 
 
 // ========== 蛇更新 ==========
@@ -461,29 +634,110 @@ void updateSnake(float dtFrame) {
   delete newModel;
 }
 
+// 檢測蛇頭是否碰到蘋果
+bool checkAppleCollision() {
+  if (!snake || appleModelIndex < 0) return false;
+
+  glm::vec3 headPos = snake->getHeadPosition();
+  float distance = glm::length(glm::vec2(headPos.x - applePosition.x, headPos.z - applePosition.z));
+
+  float collisionRadius = 0.5f;  // 碰撞半徑待確認
+  return distance < collisionRadius;
+}
+
+// 檢測蛇頭是否撞牆
+bool checkWallCollision() {
+  if (!snake) return false;
+
+  glm::vec3 headPos = snake->getHeadPosition();
+  float margin = 0.3f;  // 碰撞半徑待確認
+
+  if (headPos.x < margin || headPos.x > FLOOR_WIDTH - margin || headPos.z < margin ||
+      headPos.z > FLOOR_DEPTH - margin) {
+    return true;
+  }
+  return false;
+}
+
+
 
 
 // ========== 載入模型 ==========
 void loadModels() {
-  ctx.models.push_back(createPlane());  // 地板
-  //ctx.models.push_back(createTestBox());  // 12202131 用來測試顯示是否有問題 更12202328 已不需要
-  ctx.models.push_back(initializeSnake());  // 蛇模型
+  // 地板 (index 0)
+  ctx.models.push_back(createPlane()); // 地板
+
+  // 蛇 (index 1)
+  ctx.models.push_back(initializeSnake()); // 蛇模型
   snakeModelIndex = (int)ctx.models.size() - 1;
+
+  // 蘋果
+  Model* apple = createApple();
+  if (apple) {
+    ctx.models.push_back(apple);
+    appleModelIndex = (int)ctx.models.size() - 1;
+    std::cout << "Loaded: Apple (index " << appleModelIndex << ")" << std::endl;
+  }
+
+  // 四面牆壁
+  // 前牆 (Z = 0)
+  Model* frontWall =
+      createWall(FLOOR_WIDTH, WALL_HEIGHT, WALL_THICKNESS, glm::vec3(FLOOR_CENTER_X, 0, 0), glm::vec3(0, 0, 1));
+  ctx.models.push_back(frontWall);
+  wallModelIndices[0] = (int)ctx.models.size() - 1;
+
+  // 後牆 (Z = FLOOR_DEPTH)
+  Model* backWall = createWall(FLOOR_WIDTH, WALL_HEIGHT, WALL_THICKNESS, glm::vec3(FLOOR_CENTER_X, 0, FLOOR_DEPTH),
+                               glm::vec3(0, 0, -1));
+  ctx.models.push_back(backWall);
+  wallModelIndices[1] = (int)ctx.models.size() - 1;
+
+  // 左牆 (X = 0)
+  Model* leftWall =
+      createWall(WALL_THICKNESS, WALL_HEIGHT, FLOOR_DEPTH, glm::vec3(0, 0, FLOOR_CENTER_Z), glm::vec3(1, 0, 0));
+  ctx.models.push_back(leftWall);
+  wallModelIndices[2] = (int)ctx.models.size() - 1;
+
+  // 右牆 (X = FLOOR_WIDTH)
+  Model* rightWall = createWall(WALL_THICKNESS, WALL_HEIGHT, FLOOR_DEPTH, glm::vec3(FLOOR_WIDTH, 0, FLOOR_CENTER_Z),
+                                glm::vec3(-1, 0, 0));
+  ctx.models.push_back(rightWall);
+  wallModelIndices[3] = (int)ctx.models.size() - 1;
+
+  std::cout << "Loaded: 4 walls" << std::endl;
+  std::cout << "=== Total models: " << ctx.models.size() << " ===" << std::endl;
 }
+
 
 // ========== 設置物件 ==========
 void setupObjects() {
   // 地板
-  ctx.objects.push_back(new Object(0, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, 0.0))));
+  ctx.objects.push_back(new Object(0, glm::identity<glm::mat4>()));
   (*ctx.objects.rbegin())->material = mMirror;
 
   // 12202131 用來測試顯示是否有問題 更12202328 已不需要
-  //ctx.objects.push_back(new Object(1, glm::translate(glm::identity<glm::mat4>(), glm::vec3(2.0, 2.0, 2.0))));
+  // ctx.objects.push_back(new Object(1, glm::translate(glm::identity<glm::mat4>(), glm::vec3(2.0, 2.0, 2.0))));
   //(*ctx.objects.rbegin())->material = mShinyred;
 
-  // 蛇
-  //ctx.objects.push_back(new Object(snakeModelIndex, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0, 0.0)))); //12210411原本想嘗試用這個框架的，但好像確實有渲染的問題，要改別的檔TwT，所以再改回去
   
+  // 蛇
+  // ctx.objects.push_back(new Object(snakeModelIndex, glm::translate(glm::identity<glm::mat4>(), glm::vec3(0.0, 0.0,
+  // 0.0)))); //12210411原本想嘗試用這個框架的，但好像確實有渲染的問題，要改別的檔TwT，所以再改回去
+  
+
+  // 蘋果
+  if (appleModelIndex >= 0) {
+    ctx.objects.push_back(new Object(appleModelIndex, glm::identity<glm::mat4>()));
+    (*ctx.objects.rbegin())->material = mFlatwhite;
+  }
+
+  // 四面牆壁
+  for (int i = 0; i < 4; i++) {
+    if (wallModelIndices[i] >= 0) {
+      ctx.objects.push_back(new Object(wallModelIndices[i], glm::identity<glm::mat4>()));
+      (*ctx.objects.rbegin())->material = mShinyred;
+    }
+  }
 }
 
 // ========== 渲染蛇 ==========
@@ -502,6 +756,12 @@ void renderSnake() {
 
   glm::mat4 modelMatrix = glm::identity<glm::mat4>();
   glUniformMatrix4fv(glGetUniformLocation(program, "ModelMatrix"), 1, GL_FALSE, glm::value_ptr(modelMatrix));
+
+
+  glUniform3fv(glGetUniformLocation(program, "material.ambient"), 1, glm::value_ptr(mFlatwhite.ambient));
+  glUniform3fv(glGetUniformLocation(program, "material.diffuse"), 1, glm::value_ptr(mFlatwhite.diffuse));
+  glUniform3fv(glGetUniformLocation(program, "material.specular"), 1, glm::value_ptr(mFlatwhite.specular));
+  glUniform1f(glGetUniformLocation(program, "material.shininess"), mFlatwhite.shininess);
 
   // --- 補上貼圖處理 ---
   glActiveTexture(GL_TEXTURE0);
@@ -635,7 +895,7 @@ int main() {
   GLFWwindow* window = OpenGLContext::getWindow();
   glfwSetWindowTitle(window, "HW2 - 113550001");
 
-  Camera camera(glm::vec3(0, 2, 5));
+  Camera camera(glm::vec3(FLOOR_CENTER_X, 10, FLOOR_CENTER_Z + 15));
   camera.initialize(OpenGLContext::getAspectRatio());
   glfwSetWindowUserPointer(window, &camera);
   ctx.camera = &camera;
@@ -705,7 +965,86 @@ int main() {
     }
     */
     
-    updateSnake(deltaTime);
+    if (gameState == GameState::RUNNING) {
+      // 更新計時器
+      gameTimer -= deltaTime;
+      elapsedTime += deltaTime;
+
+      // 時間到
+      if (gameTimer <= 0.0f) {
+        gameTimer = 0.0f;
+        gameState = GameState::STOPPED;
+        if (score >= WIN_SCORE) {
+          gameResult = GameResult::WIN;
+        } else {
+          gameResult = GameResult::LOSE;
+        }
+        std::cout << "[INFO] Time's up!" << std::endl;
+      }
+
+      // 更新蛇
+      updateSnake(deltaTime);
+
+      // 檢測蘋果碰撞
+      if (checkAppleCollision()) {
+        score++;
+        std::cout << "[SCORE] Ate an apple! Score: " << score << std::endl;
+        respawnApple();
+
+        for (auto& obj : ctx.objects) {
+          if (obj->modelIndex == appleModelIndex) {
+            obj->transformMatrix = glm::identity<glm::mat4>();
+          }
+        }
+
+        // 檢查是否贏了
+        if (score >= WIN_SCORE) {
+          gameState = GameState::STOPPED;
+          gameResult = GameResult::WIN;
+          std::cout << "[INFO] You Win!" << std::endl;
+        }
+      }
+
+      // 檢測牆壁碰撞
+      if (checkWallCollision()) {
+        if (!hitWall) {
+          hitWall = true;
+          gameState = GameState::STOPPED;
+          gameResult = GameResult::LOSE;
+          std::cout << "[WARNING] Hit the wall! Game Over!" << std::endl;
+        }
+      }
+    } else {
+      // 遊戲暫停或停止時，仍然渲染蛇（但不更新物理）
+      // 不呼叫 updateSnake
+    }
+
+
+
+    if (checkAppleCollision()) {
+      score++;
+      std::cout << "[SCORE] Ate an apple! Score: " << score << std::endl;
+      respawnApple();
+
+      // 更新蘋果的 Object transform
+      for (auto& obj : ctx.objects) {
+        if (obj->modelIndex == appleModelIndex) {
+          obj->transformMatrix = glm::identity<glm::mat4>();
+        }
+      }
+    }
+
+    // 檢測牆壁碰撞
+    if (checkWallCollision()) {
+      if (!hitWall) {
+        hitWall = true;
+        std::cout << "[WARNING] Hit the wall!" << std::endl;
+        // 待加入遊戲結束邏輯
+      }
+    } else {
+      hitWall = false;  // 離開牆壁後重置
+    }
+
     
     //glDisable(GL_CULL_FACE); // 12210216這個我不太懂，但我覺得應該沒差？
     
@@ -845,46 +1184,86 @@ int main() {
     // ImGui
     glDisable(GL_CULL_FACE);
     */
+
+    
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
     {
-      ImGui::Begin("Lights Control");
+      // 設定視窗大小和位置（置中顯示）
+      ImGui::SetNextWindowSize(ImVec2(300, 250), ImGuiCond_FirstUseEver);
+      ImGui::Begin("Game Control");
 
-      ImGui::Text("Directional Light");
-      {
-        ImGui::SameLine();
-        bool enable = (ctx.directionLightEnable != 0);
-        if (ImGui::Checkbox("Enable##dir", &enable)) ctx.directionLightEnable = enable ? 1 : 0;
-        ImGui::SliderFloat3("Dir X/Y/Z##dir", &ctx.directionLightDirection.x, -50.0f, 50.0f);
-        ImGui::ColorEdit3("Color##dir", &ctx.directionLightColor[0]);
-      }
+      // ===== 遊戲狀態顯示 =====
       ImGui::Separator();
 
-      ImGui::Text("Point Light");
-      {
-        ImGui::SameLine();
-        bool enable = (ctx.pointLightEnable != 0);
-        if (ImGui::Checkbox("Enable##point", &enable)) ctx.pointLightEnable = enable ? 1 : 0;
-        ImGui::SliderFloat3("Pos X/Y/Z##point", &ctx.pointLightPosition.x, -10.0f, 10.0f);
-        ImGui::ColorEdit3("Color##point", &ctx.pointLightColor[0]);
+      // 根據遊戲狀態顯示不同內容
+      if (gameState == GameState::STOPPED && gameResult == GameResult::NONE) {
+        // 遊戲尚未開始
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Press P to Start!");
+        ImGui::Text("Collect %d apples to win!", WIN_SCORE);
+        ImGui::Text("Time limit: 60 seconds");
+      } else if (gameState == GameState::RUNNING) {
+        // 遊戲進行中
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "GAME RUNNING");
+
+        // 顯示倒數計時
+        int minutes = (int)gameTimer / 60;
+        int seconds = (int)gameTimer % 60;
+        ImGui::Text("Time: %d:%02d", minutes, seconds);
+
+        // 進度條
+        float progress = gameTimer / 60.0f;
+        ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
+      } else if (gameState == GameState::PAUSED) {
+        // 遊戲暫停
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "PAUSED");
+        ImGui::Text("Press P to Resume");
+
+        int minutes = (int)gameTimer / 60;
+        int seconds = (int)gameTimer % 60;
+        ImGui::Text("Time: %d:%02d", minutes, seconds);
       }
+
       ImGui::Separator();
 
-      ImGui::Text("Spot Light");
-      {
-        ImGui::SameLine();
-        bool enable = (ctx.spotLightEnable != 0);
-        if (ImGui::Checkbox("Enable##spot", &enable)) ctx.spotLightEnable = enable ? 1 : 0;
-        ImGui::SliderFloat3("Pos X/Y/Z##spot", &ctx.spotLightPosition.x, -10.0f, 10.0f);
-        ImGui::ColorEdit3("Color##spot", &ctx.spotLightColor[0]);
+      // ===== 分數顯示 =====
+      ImGui::Text("Score: %d / %d", score, WIN_SCORE);
+
+      // 分數進度條
+      float scoreProgress = (float)score / WIN_SCORE;
+      ImGui::ProgressBar(scoreProgress, ImVec2(-1, 0), "");
+
+      // ===== 遊戲結果顯示 =====
+      if (gameResult == GameResult::WIN) {
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "*** YOU WIN! ***");
+        ImGui::Text("Final Score: %d", score);
+        ImGui::Text("Press P to Play Again");
+      } else if (gameResult == GameResult::LOSE) {
+        ImGui::Separator();
+        if (hitWall) {
+          ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "*** YOU LOSE! ***");
+          ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Hit the wall!");
+        } else {
+          ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "*** YOU LOSE! ***");
+          ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Time's up!");
+        }
+        ImGui::Text("Final Score: %d", score);
+        ImGui::Text("Press P to Play Again");
       }
+
       ImGui::Separator();
 
+      // ===== 蘋果位置（debug 用）=====
+      ImGui::Text("Apple: (%.1f, %.1f)", applePosition.x, applePosition.z);
+
+      // ===== 控制說明 =====
+      ImGui::Separator();
       ImGui::Text("Controls:");
+      ImGui::BulletText("P: Start/Pause/Restart");
       ImGui::BulletText("I: Forward");
-      ImGui::BulletText("K: Backward");
       ImGui::BulletText("J/L: Turn Left/Right");
       ImGui::BulletText("M: Switch Movement Mode");
       ImGui::BulletText("F1: Toggle Cursor");
@@ -894,6 +1273,7 @@ int main() {
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
 
 #ifdef __APPLE__
     glFlush();
@@ -917,6 +1297,38 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
 
   if (action == GLFW_PRESS) {
     switch (key) {
+      case GLFW_KEY_P: {
+        // P 鍵：開始/暫停/重新開始
+        if (gameState == GameState::STOPPED) {
+          // 重置遊戲
+          gameState = GameState::RUNNING;
+          gameResult = GameResult::NONE;
+          gameTimer = 60.0f;
+          elapsedTime = 0.0f;
+          score = 0;
+          hitWall = false;
+
+          // 重置蛇位置
+          if (snake) {
+            snake->reset();
+          }
+
+          // 重置蘋果位置
+          respawnFirstApple();
+
+          std::cout << "[INFO] Game Started!" << std::endl;
+        } else if (gameState == GameState::RUNNING) {
+          // 暫停
+          gameState = GameState::PAUSED;
+          std::cout << "[INFO] Game Paused" << std::endl;
+        } else if (gameState == GameState::PAUSED) {
+          // 繼續
+          gameState = GameState::RUNNING;
+          std::cout << "[INFO] Game Resumed" << std::endl;
+        }
+        break;
+      }
+
       case GLFW_KEY_F1: {
         Camera* cam = static_cast<Camera*>(glfwGetWindowUserPointer(window));
         if (glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
@@ -941,7 +1353,7 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         ctx.spotLightCutOffEnable = !ctx.spotLightCutOffEnable;
         break;
       }
-        
+
       case GLFW_KEY_M: {
         if (snake) {
           if (snake->getMode() == Snake::MovementMode::LATERAL) {
@@ -957,33 +1369,40 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         }
         break;
       }
-      
-      case GLFW_KEY_I:// 我故意沒設定倒退的（總覺得怪，不知道如何處理
-        snake->setSnakeMoveDirection(0, true);
+
+      // 蛇的控制只在遊戲進行中有效
+      case GLFW_KEY_I:
+        if (gameState == GameState::RUNNING && snake) {
+          snake->setSnakeMoveDirection(0, true);
+        }
         break;
       case GLFW_KEY_J:
-        snake->setSnakeMoveDirection(1, true);
+        if (gameState == GameState::RUNNING && snake) {
+          snake->setSnakeMoveDirection(1, true);
+        }
         break;
       case GLFW_KEY_L:
-        snake->setSnakeMoveDirection(2, true);
+        if (gameState == GameState::RUNNING && snake) {
+          snake->setSnakeMoveDirection(2, true);
+        }
         break;
       default:
         break;
     }
   } else if (action == GLFW_RELEASE) {
-      switch (key) {
-          case GLFW_KEY_I:
-          snake->setSnakeMoveDirection(0, false);
-          break;
-        case GLFW_KEY_J:
-          snake->setSnakeMoveDirection(1, false);
-          break;
-        case GLFW_KEY_L:
-          snake->setSnakeMoveDirection(2, false);
-          break;
-        default:
-          break;
-      }
+    switch (key) {
+      case GLFW_KEY_I:
+        if (snake) snake->setSnakeMoveDirection(0, false);
+        break;
+      case GLFW_KEY_J:
+        if (snake) snake->setSnakeMoveDirection(1, false);
+        break;
+      case GLFW_KEY_L:
+        if (snake) snake->setSnakeMoveDirection(2, false);
+        break;
+      default:
+        break;
+    }
   }
 }
 

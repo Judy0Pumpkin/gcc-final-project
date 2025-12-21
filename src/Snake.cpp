@@ -42,6 +42,7 @@ void Snake::createMassSpringSystem(const glm::vec3& startPos) {
     glm::vec3 pos = startPos + glm::vec3(i * segmentLength, 0.0f, 0.0f);
     pos.y = groundHeight;
     masses.push_back(new Mass(segmentMass, pos));
+    initialPositions.push_back(pos);  // 儲存初始位置
   }
 
   // 創建彈簧連接相鄰質點
@@ -380,6 +381,30 @@ void Snake::applyDirectionalFriction() {
       mass->setVelocity(velocity);
     }
   }
+}
+
+void Snake::reset() {
+  isMoving = false;
+  movementTimer = 0.0f;
+
+  // 重置質點位置與速度
+  for (size_t i = 0; i < masses.size(); ++i) {
+    masses[i]->setPosition(initialPositions[i]);
+    masses[i]->setVelocity(glm::vec3(0.0f));
+    masses[i]->resetForce();
+  }
+
+  // 重置彈簧長度
+  for (auto* spring : axialSprings) {
+    spring->setRestLength(segmentLength);
+  }
+
+  // 重置方向
+  forwardDirection = glm::vec3(1.0f, 0.0f, 0.0f);
+  targetDirection = forwardDirection;
+
+  // 重置移動方向按鍵狀態
+  snakeMoveDirection[0] = snakeMoveDirection[1] = snakeMoveDirection[2] = false;
 }
 
 /* 12211846 S型的應該還會需要參考這個
