@@ -41,7 +41,7 @@ void Snake::createMassSpringSystem(const glm::vec3& startPos) {
   for (int i = 0; i < numSegments; ++i) {
     glm::vec3 pos = startPos + glm::vec3(i * segmentLength, 0.0f, 0.0f);
     pos.y = groundHeight;
-    float idealMass = segmentMass * (0.7f + (float(i) / numSegments) * 0.3f);  // 從頭到尾質量逐漸增加
+    float idealMass = segmentMass * (0.5f + std::min(0.5f, (float(i) / numSegments)) * 1.0f);
     masses.push_back(new Mass(idealMass, pos));
     initialPositions.push_back(pos);  // 儲存初始位置
   }
