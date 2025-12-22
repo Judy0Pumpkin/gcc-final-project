@@ -108,10 +108,15 @@ vec3 calculateDirectionLight() {
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = dl.lightColor * (diff * material.diffuse);
     
+    // 修正後的高光計算
     vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    // 1. 確保 shininess 至少有一個極小的正值，防止 pow(0,0)
+    float safeShininess = max(material.shininess, 0.1); 
+    // 2. 限制點積範圍
+    float specBase = max(dot(viewDir, reflectDir), 0.0);
+    float spec = pow(specBase, safeShininess);
+
     vec3 specular = dl.lightColor * (spec * material.specular);
-    
     float shadow = 0.0;
     if (shadowEnable == 1) {
         shadow = calculateShadow(FragPosLightSpace, norm, lightDir, shadowMap);

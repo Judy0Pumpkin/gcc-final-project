@@ -78,7 +78,7 @@ void Snake::update(float dt) {
     mass->applyForce(glm::vec3(0, -GRAVITY * mass->getMass(), 0));
   }
 
-  // 5. 運動力（根據模式選擇）
+  // 4. 運動力（根據模式選擇）
 
   if (isMoving) {
     if (movementMode == MovementMode::SIMPLE) {                    // && snakeMoveDirection[0] == true
@@ -98,11 +98,11 @@ void Snake::update(float dt) {
     }
   }
 
-  // 6. 轉向力
+  // 5. 轉向力
   updateTarget(dt);
   applySteeringForce();
 
-  // 4. 彈簧力
+  // 6. 彈簧力
   for (auto* spring : axialSprings) {
     spring->applyForce();
   }
