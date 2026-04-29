@@ -1,4 +1,4 @@
-# NYCU CG2022 Homework 2
+# NYCU CG2025 Final Project
 
 ## Dependencies
 
